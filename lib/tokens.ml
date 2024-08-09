@@ -53,15 +53,6 @@ type _ literal =
 
 type token = Token : ('a token_kind * 'b literal option * int) ->  token
 
- (* 
-  | Bang_equal : string -> string token_kind
-  | Equal : char -> char token_kind
-  | Equal_equal : string -> string token_kind
-  | Greater_equal : string -> string token_kind
-  | Less : char -> char token_kind
-  | Less_equal : string -> string token_kind
- *)
-
  let rec skip_until_newline chars =
   match chars with
   | [] -> []  (* Reached the end of the list *)
@@ -71,53 +62,44 @@ type token = Token : ('a token_kind * 'b literal option * int) ->  token
 
 let chars_as_string    f s = String.make 1 f ^ String.make 1 s
 
-let rec handle_string acc chars line = 
+let chars_to_string l = String.of_seq (List.to_seq l)
+
+let rec extract_string_from_rest acc chars line = 
   match chars with
   | [] -> (acc, chars, line)
   | '"' :: rest -> (acc, rest, line)
-  | '\n' :: rest -> handle_string acc rest (line + 1)
-  | x :: rest -> handle_string (acc @ [x]) rest line
+  | '\n' :: rest -> extract_string_from_rest acc rest (line + 1)
+  | x :: rest -> extract_string_from_rest (acc @ [x]) rest line
 
 let string_to_char_list s =
   List.of_seq (String.to_seq s)
 let mama: token list = [Token (Left_paren '(', None , 1)]
 
-let%test _ = 
-  let rec scan code line = match code with
-  | [] -> [Token(EOF(), None, line)]
-  | '(' as c :: rest -> [Token(Left_paren c, None, line)] @ scan rest line 
-  | ')' as c :: rest -> [Token(Right_paren c, None, line)] @ scan rest line 
-  | '{' as c :: rest -> [Token(Left_brace c, None, line)] @ scan rest line
-  | '}' as c :: rest -> [Token(Right_brace c, None, line)] @ scan rest line 
-  | ',' as c :: rest -> [Token(Comma c, None, line)] @ scan rest line 
-  | '.' as c :: rest -> [Token(Dot c, None, line)] @ scan rest line 
-  | '-' as c :: rest -> [Token(Minus c, None, line)] @ scan rest line 
-  | '+' as c :: rest -> [Token(Plus c, None, line)] @ scan rest line 
-  | ';' as c :: rest -> [Token(Semicolon c, None, line)] @ scan rest line 
-  | '*' as c :: rest -> [Token(Star c, None, line)] @ scan rest line 
-  | ('!' as f) :: ('=' as s) :: rest  -> [Token(Bang_equal (chars_as_string f s), None, line)] @ scan rest line 
-  | '!' as c :: rest -> [Token(Bang c, None, line)] @ scan rest line 
-  | ('=' as f) :: ('=' as s) :: rest  -> [Token(Equal_equal (chars_as_string f s), None, line)] @ scan rest line 
-  | '=' as c :: rest -> [Token(Equal c, None, line)] @ scan rest line 
-  | ('>' as f) :: ('=' as s) :: rest  -> [Token(Greater_equal (chars_as_string f s), None, line)] @ scan rest line 
-  | '>' as c :: rest -> [Token(Greater c, None, line)] @ scan rest line 
-  | ('<' as f) :: ('=' as s) :: rest  -> [Token(Less_equal (chars_as_string f s), None, line)] @ scan rest line 
-  | '<' as c :: rest -> [Token(Less c, None, line)] @ scan rest line 
-  | '/' :: '/' :: rest -> scan (skip_until_newline rest) line
-  | '/' as c :: rest -> [Token(Slash c, None, line )] @ scan rest line
-  | (' ' | '\r' | '\t'):: rest -> scan rest line
-  |  '\n' :: rest -> scan rest (line + 1)
-  |  '"' :: rest -> scan rest (line + 1)
-  | _ -> [] in
+let look_up_keyword word = match word with
+  | "and" -> Some(And("and"))
+  | "class" -> Some(Class("class"))
+  | "else" -> Some(Else("else"))
+  | "false" -> Some(False("false"))
+  | "for" -> Some(For("for"))
+  | "fun" -> Some(Fun("fun"))
+  | "if" -> Some(If("if"))
+  | "nil" -> Some(Nil("nil"))
+  | "or" -> Some(Or("or"))
+  | "print" ->Some( Print("print"))
+  | "return" -> Some(Return("return"))
+  | "super" -> Some(Super("super"))
+  | "this" -> Some(This("this"))
+  | "true" -> Some(True("true"))
+  | "var" -> Some(Var("var"))
+  | "while" -> Some(While("while"))
+  | _ -> None
 
-  let res : token list = (scan (string_to_char_list "!=)/") 1) in
-  (List.length res) = 4
-
+let%test _ = let t = Token(EOF(),None, 1) in
+  match t with
+  | Token (k, _ , _) -> (match k with | EOF() -> true
+    | _ -> false)
   
-(* let toks : token list = [Float_token (2., (Greater_equal "sdfsdfa"), 1)] *)
 
-let%test _ = let (acc, _rest, _line ) = handle_string [] ['a';'b'; 'c';'"'; 'b'] 1 in
-  acc = ['a'; 'b'; 'c']
 
 (* let%test _ = let t = Float_Token(LParen ['('], Float_literal 42.0 , 1) and
   _t2 = String_Token(LParen ['*'], String_literal "ss", 1) in
