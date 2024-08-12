@@ -1,2 +1,5 @@
 open Tokens
-val scan : char list -> int -> token list
+
+val single_check : token_kind -> token list -> bool
+val scan_tokens : string -> token list
+val print_tokens : token list -> unit
