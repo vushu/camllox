@@ -40,6 +40,7 @@ type token_kind =
   | Var
   | While
   | EOF
+[@@deriving show]
 
 (* type token = Token : (token_kind * int) -> token *)
 type token = token_kind * int
@@ -85,15 +86,42 @@ let look_up_keyword word =
 let token_to_string = function
   | Left_paren -> "Left_paren"
   | Right_paren -> "Right_paren"
-  | Greater -> "Greater"
+  | Left_brace -> "Left_brace"
+  | Right_brace -> "Right_brace"
+  | Comma -> "Comma"
+  | Dot -> "Dot"
+  | Minus -> "Minus"
+  | Plus -> "Plus"
+  | Semicolon -> "Semicolon"
+  | Slash -> "Slash"
+  | Star -> "Star"
+  | Bang -> "Bang"
+  | Bang_equal -> "Bang_equal"
+  | Equal -> "Equal"
+  | Equal_equal -> "Equal_equal"
   | Greater_equal -> "Greater_equal"
+  | Greater -> "Greater"
+  | Less -> "Less"
+  | Less_equal -> "Less_equal"
+  (* Literals *)
+  | Identifier x -> "Identifier: " ^ x
+  | String_t x -> "String_t: " ^ x
+  | Number x -> "Number: " ^ string_of_int x
+  (* Keywords *)
+  | And -> "And"
+  | Class -> "Class"
+  | Else -> "Else"
+  | False -> "False"
+  | Fun -> "Fun"
+  | For -> "For"
+  | If -> "If"
+  | Nil -> "Nil"
+  | Or -> "Or"
+  | Print -> "Print"
+  | Return -> "Return"
+  | Super -> "Super"
+  | This -> "This"
+  | True -> "True"
+  | Var -> "Var"
+  | While -> "While"
   | EOF -> "EOF"
-  | _ -> "Unknown"
-
-(* let%test _ = let t = Float_Token(LParen ['('], Float_literal 42.0 , 1) and
-   _t2 = String_Token(LParen ['*'], String_literal "ss", 1) in
-   match t with
-   | Float_Token (_kind, lit, _line) -> (match lit with | Float_literal x -> x = 42.0 )
-     (* (match kind with | LParen (l::_) -> l = '(' | _ -> false) *)
-
-   | _ -> false *)

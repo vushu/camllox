@@ -19,43 +19,45 @@ let rec handle_number acc chars =
       if h |> is_digit then handle_number (acc @ [ h ]) t else (acc, h :: t)
 
 let scan_tokens code =
-  let rec scan_tokens_aux pos line =
-    let is_at_end = pos >= String.length code in
-    let next_is ch = if is_at_end then false else code.[pos + 1] = ch in
-    if is_at_end then [ (EOF, line) ]
+  let rec scan_tokens_aux line pos =
+    let is_at_end p = p >= String.length code in
+    let next_is ch =
+      if is_at_end (pos + 1) then false else code.[pos + 1] = ch
+    in
+    if is_at_end pos then [ (EOF, line) ]
     else
       match code.[pos] with
-      | '(' -> (Left_paren, line) :: scan_tokens_aux (pos + 1) line
-      | ')' -> (Right_paren, line) :: scan_tokens_aux (pos + 1) line
-      | '{' -> (Left_brace, line) :: scan_tokens_aux (pos + 1) line
-      | '}' -> (Right_brace, line) :: scan_tokens_aux (pos + 1) line
-      | ',' -> (Comma, line) :: scan_tokens_aux (pos + 1) line
-      | '.' -> (Dot, line) :: scan_tokens_aux (pos + 1) line
-      | '-' -> (Minus, line) :: scan_tokens_aux (pos + 1) line
-      | '+' -> (Plus, line) :: scan_tokens_aux (pos + 1) line
-      | ';' -> (Semicolon, line) :: scan_tokens_aux (pos + 1) line
-      | '*' -> (Star, line) :: scan_tokens_aux (pos + 1) line
+      | '(' -> (Left_paren, line) :: scan_tokens_aux line (pos + 1)
+      | ')' -> (Right_paren, line) :: scan_tokens_aux line (pos + 1)
+      | '{' -> (Left_brace, line) :: scan_tokens_aux line (pos + 1)
+      | '}' -> (Right_brace, line) :: scan_tokens_aux line (pos + 1)
+      | ',' -> (Comma, line) :: scan_tokens_aux line (pos + 1)
+      | '.' -> (Dot, line) :: scan_tokens_aux line (pos + 1)
+      | '-' -> (Minus, line) :: scan_tokens_aux line (pos + 1)
+      | '+' -> (Plus, line) :: scan_tokens_aux line (pos + 1)
+      | ';' -> (Semicolon, line) :: scan_tokens_aux line (pos + 1)
+      | '*' -> (Star, line) :: scan_tokens_aux line (pos + 1)
       | '!' ->
           if next_is '=' then
-            (Bang_equal, line) :: scan_tokens_aux (pos + 1) line
-          else (Bang, line) :: scan_tokens_aux (pos + 1) line
+            (Bang_equal, line) :: scan_tokens_aux line (pos + 2)
+          else (Bang, line) :: scan_tokens_aux line (pos + 1)
       | '=' ->
           if next_is '=' then
-            (Equal_equal, line) :: scan_tokens_aux (pos + 1) line
-          else (Equal, line) :: scan_tokens_aux (pos + 1) line
+            (Equal_equal, line) :: scan_tokens_aux line (pos + 2)
+          else (Equal, line) :: scan_tokens_aux line (pos + 1)
       | '>' ->
           if next_is '=' then
-            (Greater_equal, line) :: scan_tokens_aux (pos + 1) line
-          else (Greater, line) :: scan_tokens_aux (pos + 1) line
+            (Greater_equal, line) :: scan_tokens_aux line (pos + 2)
+          else (Greater, line) :: scan_tokens_aux line (pos + 1)
       | '<' ->
           if next_is '=' then
-            (Less_equal, line) :: scan_tokens_aux (pos + 1) line
-          else (Less, line) :: scan_tokens_aux (pos + 1) line
+            (Less_equal, line) :: scan_tokens_aux line (pos + 2)
+          else (Less, line) :: scan_tokens_aux line (pos + 1)
       | '/' ->
-          if next_is '/' then scan_tokens_aux (pos + 1) line
-          else (Slash, line) :: scan_tokens_aux (pos + 1) line
-      | ' ' | '\r' | '\t' -> scan_tokens_aux (pos + 1) line
-      | '\n' -> scan_tokens_aux (pos + 1) (line + 1)
+          if next_is '/' then scan_tokens_aux line (pos + 2)
+          else (Slash, line) :: scan_tokens_aux line (pos + 1)
+      | ' ' | '\r' | '\t' -> scan_tokens_aux line (pos + 1)
+      | '\n' -> scan_tokens_aux (line + 1) (pos + 1)
       | '"' ->
           let rec extract_text p acc =
             match code.[p] with
@@ -73,16 +75,14 @@ let rec get_tokens_strings = function
   | (tok, _) :: rest -> (tok |> token_to_string) ^ "|" ^ get_tokens_strings rest
 
 let single_check tk tokens =
-  let k, _ = List.hd tokens in
-  k = tk
+  match tokens with [ (k, _); (e, _) ] -> k = tk && e = EOF | _ -> false
 
 let%test _ =
   let res = scan_tokens "\"jumanji\"" in
   List.hd res |> function String_t name, _ -> name = "jumanji" | _ -> false
 
-let%test _ =
-   let res = scan_tokens "(" in
-   res |> single_check Left_paren
+let%test _ = scan_tokens "(" |> single_check Left_paren
+let%test _ = scan_tokens ">=" |> single_check Greater_equal
 
 let%test _ =
   let acc, _ = handle_number [] (string_to_char_list "42.123") in
