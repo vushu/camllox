@@ -1,5 +1,5 @@
 open Camllox.Scanner
 
 let () =
-  let res = scan_tokens ">=()>>>>><<()\"HEJ\"" in
-  print_tokens res
+  (* scan_tokens ">=()>>>>><<()\"HEJ\"" |> print_tokens; *)
+  scan_tokens "//<><>\n(" |> print_tokens

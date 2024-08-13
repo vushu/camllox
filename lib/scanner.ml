@@ -54,7 +54,16 @@ let scan_tokens code =
             (Less_equal, line) :: scan_tokens_aux line (pos + 2)
           else (Less, line) :: scan_tokens_aux line (pos + 1)
       | '/' ->
-          if next_is '/' then scan_tokens_aux line (pos + 2)
+          let rec skip_comment l p =
+            if is_at_end p then (l, p)
+            else
+              match code.[p] with
+              | '\n' -> (l + 1, p + 1)
+              | _ -> skip_comment l (p + 1)
+          in
+          if next_is '/' then
+            let new_pos, new_line = skip_comment line (pos + 1) in
+            scan_tokens_aux new_line new_pos
           else (Slash, line) :: scan_tokens_aux line (pos + 1)
       | ' ' | '\r' | '\t' -> scan_tokens_aux line (pos + 1)
       | '\n' -> scan_tokens_aux (line + 1) (pos + 1)
@@ -77,18 +86,22 @@ let rec get_tokens_strings = function
 let single_check tk tokens =
   match tokens with [ (k, _); (e, _) ] -> k = tk && e = EOF | _ -> false
 
+let is_end_of_file tokens =
+  match tokens with [ (e, _) ] -> e = EOF | _ -> false
+
 let%test _ =
   let res = scan_tokens "\"jumanji\"" in
   List.hd res |> function String_t name, _ -> name = "jumanji" | _ -> false
 
 let%test _ = scan_tokens "(" |> single_check Left_paren
 let%test _ = scan_tokens ">=" |> single_check Greater_equal
+let%test _ = scan_tokens "//{}{}{}" |> is_end_of_file
 
 let%test _ =
   let acc, _ = handle_number [] (string_to_char_list "42.123") in
   acc = [ '4'; '2'; '.'; '1'; '2'; '3' ]
 
-let print_tokens tokens = tokens |> get_tokens_strings |> print_string
+let print_tokens tokens = tokens |> get_tokens_strings |> print_endline
 (* let%test _ =
    scan_tokens "(" |> get_tokens_strings |> print_string;
    true *)
