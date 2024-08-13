@@ -21,7 +21,7 @@ type token_kind =
   (* Literals *)
   | Identifier of string
   | String_t of string
-  | Number of int
+  | Number of float
   (* Keywords *)
   | And
   | Class
@@ -106,7 +106,7 @@ let token_to_string = function
   (* Literals *)
   | Identifier x -> "Identifier: " ^ x
   | String_t x -> "String_t: " ^ x
-  | Number x -> "Number: " ^ string_of_int x
+  | Number x -> "Number: " ^ string_of_float x
   (* Keywords *)
   | And -> "And"
   | Class -> "Class"
