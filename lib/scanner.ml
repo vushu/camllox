@@ -93,19 +93,26 @@ let scan_tokens code =
           (Number (char_list_to_float (m :: dig)), 1)
           :: scan_tokens_aux line (pos + List.length dig + 1)
       | ('a' .. 'z' | 'A' .. 'Z') as k ->
-          let rec get_keyword p =
+          (* handle identifer *)
+          let rec get_alphanumerics p =
             if is_at_end p then []
             else
               match code.[p] with
               | ('a' .. 'z' | 'A' .. 'Z' | '0' .. '9') as w ->
-                  w :: get_keyword (p + 1)
+                  w :: get_alphanumerics (p + 1)
               | _ -> []
           in
-          let word = get_keyword (pos + 1) in
-          (* Todo: keyword search  *)
-          (String_t (chars_to_string (k :: word)), 1)
+          let word = get_alphanumerics (pos + 1) in
+          let lookup_word = chars_to_string (k :: word) in
+          let keyword = look_up_keyword lookup_word in
+          let result_token =
+            match keyword with Some x -> x | None -> Identifier lookup_word
+          in
+          (result_token, line)
           :: scan_tokens_aux line (pos + List.length word + 1)
-      | _ -> []
+      | x ->
+          print_endline ("Character " ^ String.make 1 x ^ " isn't a known token");
+          []
   in
   scan_tokens_aux 0 0
 
