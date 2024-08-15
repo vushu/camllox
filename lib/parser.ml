@@ -1,24 +1,26 @@
 open Tokens
 open Ast
 
-let primary = function
+let rec primary = function
   | [] -> (Literal_expr (String_t "FAILED"), [])
   | (((False | True | Nil) as t), _) :: rest -> (Literal_expr t, rest)
   | (((String_t _ | Identifier _ | Number _) as t), _) :: rest ->
       (Literal_expr t, rest)
   (* Grouping *)
-  | ((Left_paren as t), _) :: rest -> (Literal_expr t, rest)
-  | _ :: rest ->
+  | (Left_paren, _) :: rest ->
+      let e, r = expression rest in
+      (e, r)
+  | _ ->
       print_endline "Failed to parse";
-      (Literal_expr (String_t "Failed to parse"), rest)
+      (Group_expr (Literal_expr (String_t "Failed to parse")), [])
 
-let rec unary = function
+and unary = function
   | (((Bang | Minus) as t), _) :: rest ->
       let right, r = unary rest in
       (Unary_expr { op = t; right }, r)
   | x -> primary x
 
-let factor tokens =
+and factor tokens =
   let left, r = unary tokens in
   match r with
   | (((Slash | Star) as t), _) :: rest ->
@@ -26,7 +28,7 @@ let factor tokens =
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
 
-let term tokens =
+and term tokens =
   let left, r = factor tokens in
   match r with
   | (((Minus | Plus) as t), _) :: r ->
@@ -34,7 +36,7 @@ let term tokens =
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
 
-let comparison tokens =
+and comparison tokens =
   let left, r = term tokens in
   match r with
   | (((Greater | Greater_equal | Less | Less_equal) as t), _) :: r ->
@@ -42,7 +44,7 @@ let comparison tokens =
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
 
-let equality tokens =
+and equality tokens =
   let left, r = comparison tokens in
   match r with
   | (((Bang_equal | Equal_equal) as t), _) :: r ->
@@ -50,7 +52,7 @@ let equality tokens =
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
 
-let and_expression tokens =
+and and_expression tokens =
   let left, r = equality tokens in
   match r with
   | ((And as t), _) :: r ->
@@ -58,7 +60,7 @@ let and_expression tokens =
       (Logical_expr { op = t; left; right }, r)
   | _ -> (left, r)
 
-let or_expression tokens =
+and or_expression tokens =
   let left, r = and_expression tokens in
   match r with
   | ((Or as t), _) :: r ->
@@ -66,8 +68,10 @@ let or_expression tokens =
       (Logical_expr { op = t; left; right }, r)
   | _ -> (left, r)
 
+and expression tokens = or_expression tokens
+
 let parse tokens =
-  let res, _ = or_expression tokens in
+  let res, _ = expression tokens in
   res
 
 let%test _ =
@@ -79,5 +83,5 @@ let%test _ =
   match exprs with Binary_expr { op; _ } -> op = Plus | _ -> false
 
 let%test _ =
-  let exprs = parse [ (Number 1., 1); (Greater, 1); (Number 1., 1) ] in
-  match exprs with Binary_expr { op; _ } -> op = Greater | _ -> false
+  let exprs = parse [ (True, 1); (And, 1); (True, 1) ] in
+  match exprs with Logical_expr { op; _ } -> op = And | _ -> false
