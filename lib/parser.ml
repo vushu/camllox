@@ -7,9 +7,15 @@ let rec primary = function
   | (((String_t _ | Identifier _ | Number _) as t), _) :: rest ->
       (Literal_expr t, rest)
   (* Grouping *)
-  | (Left_paren, _) :: rest ->
+  | (Left_paren, _) :: rest -> (
       let e, r = expression rest in
-      (e, r)
+      match r with
+      | (Right_paren, _) :: r ->
+          print_endline "Created Group expression succesfully";
+          (Group_expr e, r)
+      | _ ->
+          print_endline "Failed to parse group expression";
+          (e, r))
   | _ ->
       print_endline "Failed to parse";
       (Group_expr (Literal_expr (String_t "Failed to parse")), [])
@@ -85,3 +91,7 @@ let%test _ =
 let%test _ =
   let exprs = parse [ (True, 1); (And, 1); (True, 1) ] in
   match exprs with Logical_expr { op; _ } -> op = And | _ -> false
+
+let%test _ =
+  let exprs = parse [ (Left_paren, 1); (True, 1); (Right_paren, 1) ] in
+  match exprs with Group_expr _ -> true | _ -> false
