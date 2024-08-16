@@ -1,6 +1,8 @@
 open Tokens
 open Ast
 
+exception ParseException of string
+
 let rec primary = function
   | [] -> (Literal_expr (String_t "FAILED"), [])
   | (((False | True | Nil) as t), _) :: rest -> (Literal_expr t, rest)
@@ -13,12 +15,10 @@ let rec primary = function
       | (Right_paren, _) :: r ->
           print_endline "Created Group expression succesfully";
           (Group_expr e, r)
-      | _ ->
-          print_endline "Failed to parse group expression";
-          (e, r))
-  | _ ->
-      print_endline "Failed to parse";
-      (Group_expr (Literal_expr (String_t "Failed to parse")), [])
+      | _ -> raise (ParseException "Failed to parse group expression"))
+  | _ -> raise (ParseException "Unknown parse case")
+(* print_endline "Failed to parse"; *)
+(* (Group_expr (Literal_expr (String_t "Failed to parse")), []) *)
 
 and unary = function
   | (((Bang | Minus) as t), _) :: rest ->
@@ -93,5 +93,9 @@ let%test _ =
   match exprs with Logical_expr { op; _ } -> op = And | _ -> false
 
 let%test _ =
-  let exprs = parse [ (Left_paren, 1); (True, 1); (Right_paren, 1) ] in
-  match exprs with Group_expr _ -> true | _ -> false
+  try
+    let exprs = parse [ (Left_paren, 1); (True, 1); (Right_paren, 1) ] in
+    match exprs with Group_expr _ -> true | _ -> false
+  with ParseException msg ->
+    print_endline msg;
+    false
