@@ -20,6 +20,24 @@ let rec primary = function
 (* print_endline "Failed to parse"; *)
 (* (Group_expr (Literal_expr (String_t "Failed to parse")), []) *)
 
+and finish_call callee tokens =
+  match tokens with
+  | ((Right_paren, _) as t) :: rest -> (callee, t :: rest)
+  | arg ->
+      let rec consume_args args toks =
+        let e, r = expression toks in
+        r |> function
+        | (Comma, _) :: r -> consume_args (args @ [ e ]) r
+        | ((Right_paren as t), _) :: r ->
+            (Call_expr { callee; paren = t; args }, r)
+        | _ -> raise (ParseException "Expected ')' after arguments")
+      in
+      consume_args [] arg
+
+and call tokens =
+  let e, r = primary tokens in
+  match r with (Left_paren, _) :: r -> (finish_call e, r) | all -> (e, all)
+
 and unary = function
   | (((Bang | Minus) as t), _) :: rest ->
       let right, r = unary rest in
