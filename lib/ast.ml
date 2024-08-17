@@ -16,5 +16,6 @@ type stmt =
   | Expression_stmt of expr
   | Var_stmt of { name : token_kind; init : expr option }
   | Block_stmt of stmt list
-  | If_stmt of { cond : expr; then_branch : stmt; else_branch : stmt }
+  | If_stmt of { cond : expr; then_branch : stmt; else_branch : stmt option }
   | While_Stmt of { cond : expr; body : stmt }
+  | Print_stmt of expr

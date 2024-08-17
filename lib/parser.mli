@@ -1,4 +1,4 @@
 open Ast
 open Tokens
 
-val parse : token list -> expr
+val parse : token list -> stmt list

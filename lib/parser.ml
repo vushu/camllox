@@ -4,7 +4,7 @@ open Ast
 exception ParseException of string
 
 let consume tk message = function
-  | [] -> 
+  | [] ->
       print_endline "List is empty.";
       raise (ParseException message)
   | (kind, _) :: xs -> if kind = tk then xs else raise (ParseException message)
@@ -12,8 +12,8 @@ let consume tk message = function
 let rec primary = function
   | [] -> (Literal_expr (String_t "FAILED"), [])
   | (((False | True | Nil) as t), _) :: rest -> (Literal_expr t, rest)
-  | (((String_t _ | Identifier _ | Number _) as t), _) :: rest ->
-      (Literal_expr t, rest)
+  | (((String_t _ | Number _) as t), _) :: rest -> (Literal_expr t, rest)
+  | ((Identifier _ as t), _) :: rest -> (Variable_expr t, rest)
   (* Grouping *)
   | (Left_paren, _) :: rest -> (
       let e, r = expression rest in
@@ -109,38 +109,92 @@ and assigment tokens =
       )
   | _ -> (e, r)
 
+and expression tokens = assigment tokens
+
 and var_declaration tokens =
   match tokens with
   | ((Identifier _ as name), _) :: r -> (
       r |> function
       | (Equal, _) :: r ->
           let e, r = expression r in
-          let r = consume Semicolon "Expected ';' after variable declaration." r in
+          let r =
+            consume Semicolon "Expected ';' after variable declaration." r
+          in
           (Var_stmt { name; init = Some e }, r)
       | x -> (Var_stmt { name; init = None }, x))
   | _ -> raise (ParseException "Expect variable name.")
 
-and expression tokens = assigment tokens
+and declaration = function
+  | (Var, 1) :: rest -> var_declaration rest
+  | x -> statement x
+
+and expression_statement tokens =
+  let e, r = expression tokens in
+  let r = consume Semicolon "Expected ';' after variable declaration." r in
+  (Expression_stmt e, r)
+
+and print_statement tokens =
+  let e, r = expression tokens in
+  let r = consume Semicolon "Expected ';' after value." r in
+  (Print_stmt e, r)
+
+and block tokens =
+  let rec get_statements stmts toks =
+    match toks with
+    | [] -> raise (ParseException "Expected '}' after block.")
+    | (Right_brace, _) :: rest -> (stmts, rest)
+    | x ->
+        let s, r = declaration x in
+        get_statements (stmts @ [ s ]) r
+  in
+  get_statements [] tokens
+
+and if_statement tokens =
+  let r = consume Left_paren "Expected '(' after 'if' ." tokens in
+  let cond, r = expression r in
+  let r = consume Right_paren "Expected ')' after if condition ." r in
+  (* Then branch *)
+  let then_branch, r = statement r in
+  match r with
+  | (Else, _) :: r ->
+      let else_branch, r = statement r in
+      (If_stmt { cond; then_branch; else_branch = Some else_branch }, r)
+  | x -> (If_stmt { cond; then_branch; else_branch = None }, x)
+
+and statement = function
+  | (Print, _) :: r -> print_statement r
+  | (Left_brace, _) :: r ->
+      let stmts, r = block r in
+      (Block_stmt stmts, r)
+  | (If, _) :: r -> if_statement r
+  | x -> expression_statement x
 
 let parse tokens =
-  let res, _ = expression tokens in
-  res
+  let rec get_statements stmts toks =
+    match toks with
+    | [] -> stmts
+    | [ (EOF, _) ] -> stmts
+    | xs ->
+        let s, r = declaration xs in
+        get_statements (stmts @ [ s ]) r
+  in
+  get_statements [] tokens
 
 let%test _ =
-  let exprs = parse [ (Minus, 1); (Number 1., 1) ] in
+  let exprs, _ = unary [ (Minus, 1); (Number 1., 1) ] in
   match exprs with Unary_expr { op; _ } -> op = Minus | _ -> false
 
 let%test _ =
-  let exprs = parse [ (Number 1., 1); (Plus, 1); (Number 1., 1) ] in
+  let exprs, _ = term [ (Number 1., 1); (Plus, 1); (Number 1., 1) ] in
   match exprs with Binary_expr { op; _ } -> op = Plus | _ -> false
 
 let%test _ =
-  let exprs = parse [ (True, 1); (And, 1); (True, 1) ] in
+  let exprs, _ = and_expression [ (True, 1); (And, 1); (True, 1) ] in
   match exprs with Logical_expr { op; _ } -> op = And | _ -> false
 
 let%test _ =
   try
-    let exprs = parse [ (Left_paren, 1); (True, 1); (Right_paren, 1) ] in
+    let exprs, _ = primary [ (Left_paren, 1); (True, 1); (Right_paren, 1) ] in
     match exprs with Group_expr _ -> true | _ -> false
   with ParseException msg ->
     print_endline msg;
@@ -162,3 +216,83 @@ let%test _ =
   | Var_stmt { name; init }, _ ->
       name = Identifier "Mama" && Option.is_some init
   | _ -> false
+
+let%test _ =
+  let stmts =
+    parse [ (Identifier "Mama", 1); (Equal, 1); (Number 1., 1); (Semicolon, 1) ]
+    |> List.hd
+  in
+  match stmts with Expression_stmt (Assign_expr _) -> true | _ -> false
+
+let%test _ =
+  let stmts =
+    parse
+      [
+        (If, 1);
+        (Left_paren, 1);
+        (True, 1);
+        (Right_paren, 1);
+        (Left_brace, 1);
+        (Identifier "hej", 1);
+        (Semicolon, 1);
+        (Right_brace, 1);
+        (Else, 1);
+        (Left_brace, 1);
+        (Right_brace, 1);
+      ]
+    |> List.hd
+  in
+  match stmts with
+  | If_stmt { cond = _; then_branch = _; else_branch } ->
+      Option.is_some else_branch
+  | _ -> false
+
+let%test _ =
+  let stmts =
+    parse
+      [
+        (If, 1);
+        (Left_paren, 1);
+        (True, 1);
+        (Right_paren, 1);
+        (Left_brace, 1);
+        (Identifier "hej", 1);
+        (Semicolon, 1);
+        (Right_brace, 1);
+      ]
+    |> List.hd
+  in
+  match stmts with If_stmt _ -> true | _ -> false
+
+let%test _ =
+  let stmts =
+    parse
+      [
+        (If, 1);
+        (Left_paren, 1);
+        (True, 1);
+        (Right_paren, 1);
+        (Left_brace, 1);
+        (Identifier "hej", 1);
+        (Semicolon, 1);
+        (Right_brace, 1);
+      ]
+    |> List.hd
+  in
+  match stmts with If_stmt _ -> true | _ -> false
+
+let%test _ =
+  let stmts =
+    parse
+      [
+        (Left_brace, 1); (Identifier "hej", 1); (Semicolon, 1); (Right_brace, 1);
+      ]
+    |> List.hd
+  in
+  match stmts with Block_stmt _ -> true | _ -> false
+
+let%test _ =
+  let stmts =
+    parse [ (Print, 1); (Identifier "hej", 1); (Semicolon, 1) ] |> List.hd
+  in
+  match stmts with Print_stmt _ -> true | _ -> false
