@@ -3,6 +3,12 @@ open Ast
 
 exception ParseException of string
 
+let consume tk message = function
+  | [] -> 
+      print_endline "List is empty.";
+      raise (ParseException message)
+  | (kind, _) :: xs -> if kind = tk then xs else raise (ParseException message)
+
 let rec primary = function
   | [] -> (Literal_expr (String_t "FAILED"), [])
   | (((False | True | Nil) as t), _) :: rest -> (Literal_expr t, rest)
@@ -13,12 +19,10 @@ let rec primary = function
       let e, r = expression rest in
       match r with
       | (Right_paren, _) :: r ->
-          print_endline "Created Group expression succesfully";
+          (* print_endline "Created Group expression succesfully"; *)
           (Group_expr e, r)
       | _ -> raise (ParseException "Failed to parse group expression"))
   | _ -> raise (ParseException "Unknown parse case")
-(* print_endline "Failed to parse"; *)
-(* (Group_expr (Literal_expr (String_t "Failed to parse")), []) *)
 
 and finish_call callee tokens =
   match tokens with
@@ -36,13 +40,13 @@ and finish_call callee tokens =
 
 and call tokens =
   let e, r = primary tokens in
-  match r with (Left_paren, _) :: r -> (finish_call e, r) | all -> (e, all)
+  match r with (Left_paren, _) :: r -> finish_call e r | all -> (e, all)
 
 and unary = function
   | (((Bang | Minus) as t), _) :: rest ->
       let right, r = unary rest in
       (Unary_expr { op = t; right }, r)
-  | x -> primary x
+  | x -> call x
 
 and factor tokens =
   let left, r = unary tokens in
@@ -92,7 +96,31 @@ and or_expression tokens =
       (Logical_expr { op = t; left; right }, r)
   | _ -> (left, r)
 
-and expression tokens = or_expression tokens
+and assigment tokens =
+  let e, r = or_expression tokens in
+  match r with
+  | ((Equal as tk), _) :: r -> (
+      let value, r = assigment r in
+      match e with
+      | Variable_expr n -> (Assign_expr { name = n; value }, r)
+      | _ ->
+          raise
+            (ParseException (token_to_string tk ^ " Invalid assignment target."))
+      )
+  | _ -> (e, r)
+
+and var_declaration tokens =
+  match tokens with
+  | ((Identifier _ as name), _) :: r -> (
+      r |> function
+      | (Equal, _) :: r ->
+          let e, r = expression r in
+          let r = consume Semicolon "Expected ';' after variable declaration." r in
+          (Var_stmt { name; init = Some e }, r)
+      | x -> (Var_stmt { name; init = None }, x))
+  | _ -> raise (ParseException "Expect variable name.")
+
+and expression tokens = assigment tokens
 
 let parse tokens =
   let res, _ = expression tokens in
@@ -117,3 +145,20 @@ let%test _ =
   with ParseException msg ->
     print_endline msg;
     false
+
+let%test _ =
+  let stmts = var_declaration [ (Identifier "Mama", 1) ] in
+  match stmts with
+  | Var_stmt { name; init }, _ ->
+      name = Identifier "Mama" && Option.is_none init
+  | _ -> false
+
+let%test _ =
+  let stmts =
+    var_declaration
+      [ (Identifier "Mama", 1); (Equal, 1); (Number 1., 1); (Semicolon, 1) ]
+  in
+  match stmts with
+  | Var_stmt { name; init }, _ ->
+      name = Identifier "Mama" && Option.is_some init
+  | _ -> false
