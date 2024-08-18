@@ -385,3 +385,23 @@ let%test _ =
     |> List.hd
   in
   match stmts with While_stmt _ -> true | _ -> false
+
+let%test _ =
+  let stmts =
+    parse
+      [
+        (For, 1);
+        (Left_paren, 1);
+        (Var, 1);
+        (Identifier "my_var", 1);
+        (Equal, 1);
+        (Number 0., 1);
+        (Semicolon, 1);
+        (Semicolon, 1);
+        (Right_paren, 1);
+        (Left_brace, 1);
+        (Right_brace, 1);
+      ]
+    |> List.hd
+  in
+  match stmts with Block_stmt _ -> true | _ -> false
