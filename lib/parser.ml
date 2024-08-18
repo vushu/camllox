@@ -161,12 +161,69 @@ and if_statement tokens =
       (If_stmt { cond; then_branch; else_branch = Some else_branch }, r)
   | x -> (If_stmt { cond; then_branch; else_branch = None }, x)
 
+and while_statement tokens =
+  let cond, r =
+    consume Left_paren "Expected '(' after 'while'." tokens |> expression
+  in
+
+  let r = consume Right_paren "Expected ')' after 'condition'." r in
+  let body, r = statement r in
+  (While_stmt { cond; body }, r)
+
+and for_statement tokens =
+  let init, r =
+    consume Left_paren "Expected '(' after 'for'." tokens |> function
+    | (Semicolon, _) :: r -> (None, r)
+    | (Var, __) :: r ->
+        let e, r = var_declaration r in
+        (Some e, r)
+    | x ->
+        let e, r = expression_statement x in
+        (Some e, r)
+  in
+  let cond, r =
+    match r with
+    | ((Semicolon, _) as t) :: r -> (None, t :: r)
+    | x ->
+        let e, r = expression x in
+        (Some e, r)
+  in
+  let r = consume Semicolon "Expected ';' after loop condition." r in
+  let increment, r =
+    match r with
+    | [] -> raise (ParseException "Expected ')' after for clauses.")
+    | (Right_paren, _) :: r -> (None, r)
+    | x ->
+        let e, r = expression x in
+        (Some e, r)
+  in
+
+  let body, r = statement r in
+  let body =
+    if Option.is_none increment then body
+    else
+      let expr_stmts = Expression_stmt (Option.get increment) in
+      Block_stmt [ expr_stmts; body ]
+  in
+
+  let body =
+    if Option.is_none cond then While_stmt { cond = Literal_expr True; body }
+    else While_stmt { cond = Option.get cond; body }
+  in
+
+  let body =
+    match init with None -> body | Some init -> Block_stmt [ body; init ]
+  in
+  (body, r)
+
 and statement = function
   | (Print, _) :: r -> print_statement r
   | (Left_brace, _) :: r ->
       let stmts, r = block r in
       (Block_stmt stmts, r)
   | (If, _) :: r -> if_statement r
+  | (While, _) :: r -> while_statement r
+  | (For, _) :: r -> for_statement r
   | x -> expression_statement x
 
 let parse tokens =
@@ -296,3 +353,35 @@ let%test _ =
     parse [ (Print, 1); (Identifier "hej", 1); (Semicolon, 1) ] |> List.hd
   in
   match stmts with Print_stmt _ -> true | _ -> false
+
+let%test _ =
+  let stmts =
+    parse
+      [
+        (While, 1);
+        (Left_paren, 1);
+        (True, 1);
+        (Right_paren, 1);
+        (Print, 1);
+        (Identifier "hej", 1);
+        (Semicolon, 1);
+      ]
+    |> List.hd
+  in
+  match stmts with While_stmt _ -> true | _ -> false
+
+let%test _ =
+  let stmts =
+    parse
+      [
+        (For, 1);
+        (Left_paren, 1);
+        (Semicolon, 1);
+        (Semicolon, 1);
+        (Right_paren, 1);
+        (Left_brace, 1);
+        (Right_brace, 1);
+      ]
+    |> List.hd
+  in
+  match stmts with While_stmt _ -> true | _ -> false
