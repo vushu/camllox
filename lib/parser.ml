@@ -13,7 +13,7 @@ let rec primary = function
   | [] -> (Literal_expr (String_t "FAILED"), [])
   | (((False | True | Nil) as t), _) :: rest -> (Literal_expr t, rest)
   | (((String_t _ | Number _) as t), _) :: rest -> (Literal_expr t, rest)
-  | ((Identifier _ as t), _) :: rest -> (Variable_expr t, rest)
+  | ((Identifier _, _) as t) :: rest -> (Variable_expr t, rest)
   (* Grouping *)
   | (Left_paren, _) :: rest -> (
       let e, r = expression rest in
@@ -32,7 +32,7 @@ and finish_call callee tokens =
         let e, r = expression toks in
         r |> function
         | (Comma, _) :: r -> consume_args (args @ [ e ]) r
-        | ((Right_paren as t), _) :: r ->
+        | ((Right_paren, _) as t) :: r ->
             (Call_expr { callee; paren = t; args }, r)
         | _ -> raise (ParseException "Expected ')' after arguments")
       in
@@ -43,7 +43,7 @@ and call tokens =
   match r with (Left_paren, _) :: r -> finish_call e r | all -> (e, all)
 
 and unary = function
-  | (((Bang | Minus) as t), _) :: rest ->
+  | (((Bang | Minus), _) as t) :: rest ->
       let right, r = unary rest in
       (Unary_expr { op = t; right }, r)
   | x -> call x
@@ -51,7 +51,7 @@ and unary = function
 and factor tokens =
   let left, r = unary tokens in
   match r with
-  | (((Slash | Star) as t), _) :: rest ->
+  | (((Slash | Star), _) as t) :: rest ->
       let right, r = unary rest in
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -59,7 +59,7 @@ and factor tokens =
 and term tokens =
   let left, r = factor tokens in
   match r with
-  | (((Minus | Plus) as t), _) :: r ->
+  | (((Minus | Plus), _) as t) :: r ->
       let right, r = factor r in
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -67,7 +67,7 @@ and term tokens =
 and comparison tokens =
   let left, r = term tokens in
   match r with
-  | (((Greater | Greater_equal | Less | Less_equal) as t), _) :: r ->
+  | (((Greater | Greater_equal | Less | Less_equal), _) as t) :: r ->
       let right, r = factor r in
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -75,7 +75,7 @@ and comparison tokens =
 and equality tokens =
   let left, r = comparison tokens in
   match r with
-  | (((Bang_equal | Equal_equal) as t), _) :: r ->
+  | (((Bang_equal | Equal_equal), _) as t) :: r ->
       let right, r = comparison r in
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -83,7 +83,7 @@ and equality tokens =
 and and_expression tokens =
   let left, r = equality tokens in
   match r with
-  | ((And as t), _) :: r ->
+  | ((And, _) as t) :: r ->
       let right, r = equality r in
       (Logical_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -91,7 +91,7 @@ and and_expression tokens =
 and or_expression tokens =
   let left, r = and_expression tokens in
   match r with
-  | ((Or as t), _) :: r ->
+  | ((Or, _) as t) :: r ->
       let right, r = and_expression r in
       (Logical_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -113,7 +113,7 @@ and expression tokens = assigment tokens
 
 and var_declaration tokens =
   match tokens with
-  | ((Identifier _ as name), _) :: r -> (
+  | ((Identifier _, _) as name) :: r -> (
       r |> function
       | (Equal, _) :: r ->
           let e, r = expression r in
@@ -239,15 +239,15 @@ let parse tokens =
 
 let%test _ =
   let exprs, _ = unary [ (Minus, 1); (Number 1., 1) ] in
-  match exprs with Unary_expr { op; _ } -> op = Minus | _ -> false
+  match exprs with Unary_expr { op; _ } -> op = (Minus, 1) | _ -> false
 
 let%test _ =
   let exprs, _ = term [ (Number 1., 1); (Plus, 1); (Number 1., 1) ] in
-  match exprs with Binary_expr { op; _ } -> op = Plus | _ -> false
+  match exprs with Binary_expr { op; _ } -> op = (Plus, 1) | _ -> false
 
 let%test _ =
   let exprs, _ = and_expression [ (True, 1); (And, 1); (True, 1) ] in
-  match exprs with Logical_expr { op; _ } -> op = And | _ -> false
+  match exprs with Logical_expr { op; _ } -> op = (And, 1) | _ -> false
 
 let%test _ =
   try
@@ -261,7 +261,7 @@ let%test _ =
   let stmts = var_declaration [ (Identifier "Mama", 1) ] in
   match stmts with
   | Var_stmt { name; init }, _ ->
-      name = Identifier "Mama" && Option.is_none init
+      name = (Identifier "Mama", 1) && Option.is_none init
   | _ -> false
 
 let%test _ =
@@ -271,7 +271,7 @@ let%test _ =
   in
   match stmts with
   | Var_stmt { name; init }, _ ->
-      name = Identifier "Mama" && Option.is_some init
+      name = (Identifier "Mama", 1) && Option.is_some init
   | _ -> false
 
 let%test _ =
