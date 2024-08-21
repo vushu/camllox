@@ -30,35 +30,35 @@ let scan_tokens code =
     let next_is ch =
       if is_at_end (pos + 1) then false else code.[pos + 1] = ch
     in
-    if is_at_end pos then [ (EOF, line) ]
+    if is_at_end pos then [ { kind = EOF; line } ]
     else
       match code.[pos] with
-      | '(' -> (Left_paren, line) :: scan_tokens_aux line (pos + 1)
-      | ')' -> (Right_paren, line) :: scan_tokens_aux line (pos + 1)
-      | '{' -> (Left_brace, line) :: scan_tokens_aux line (pos + 1)
-      | '}' -> (Right_brace, line) :: scan_tokens_aux line (pos + 1)
-      | ',' -> (Comma, line) :: scan_tokens_aux line (pos + 1)
-      | '.' -> (Dot, line) :: scan_tokens_aux line (pos + 1)
-      | '-' -> (Minus, line) :: scan_tokens_aux line (pos + 1)
-      | '+' -> (Plus, line) :: scan_tokens_aux line (pos + 1)
-      | ';' -> (Semicolon, line) :: scan_tokens_aux line (pos + 1)
-      | '*' -> (Star, line) :: scan_tokens_aux line (pos + 1)
+      | '(' -> { kind = Left_paren; line } :: scan_tokens_aux line (pos + 1)
+      | ')' -> { kind = Right_paren; line } :: scan_tokens_aux line (pos + 1)
+      | '{' -> { kind = Left_brace; line } :: scan_tokens_aux line (pos + 1)
+      | '}' -> { kind = Right_brace; line } :: scan_tokens_aux line (pos + 1)
+      | ',' -> { kind = Comma; line } :: scan_tokens_aux line (pos + 1)
+      | '.' -> { kind = Dot; line } :: scan_tokens_aux line (pos + 1)
+      | '-' -> { kind = Minus; line } :: scan_tokens_aux line (pos + 1)
+      | '+' -> { kind = Plus; line } :: scan_tokens_aux line (pos + 1)
+      | ';' -> { kind = Semicolon; line } :: scan_tokens_aux line (pos + 1)
+      | '*' -> { kind = Star; line } :: scan_tokens_aux line (pos + 1)
       | '!' ->
           if next_is '=' then
-            (Bang_equal, line) :: scan_tokens_aux line (pos + 2)
-          else (Bang, line) :: scan_tokens_aux line (pos + 1)
+            { kind = Bang_equal; line } :: scan_tokens_aux line (pos + 2)
+          else { kind = Bang; line } :: scan_tokens_aux line (pos + 1)
       | '=' ->
           if next_is '=' then
-            (Equal_equal, line) :: scan_tokens_aux line (pos + 2)
-          else (Equal, line) :: scan_tokens_aux line (pos + 1)
+            { kind = Equal_equal; line } :: scan_tokens_aux line (pos + 2)
+          else { kind = Equal; line } :: scan_tokens_aux line (pos + 1)
       | '>' ->
           if next_is '=' then
-            (Greater_equal, line) :: scan_tokens_aux line (pos + 2)
-          else (Greater, line) :: scan_tokens_aux line (pos + 1)
+            { kind = Greater_equal; line } :: scan_tokens_aux line (pos + 2)
+          else { kind = Greater; line } :: scan_tokens_aux line (pos + 1)
       | '<' ->
           if next_is '=' then
-            (Less_equal, line) :: scan_tokens_aux line (pos + 2)
-          else (Less, line) :: scan_tokens_aux line (pos + 1)
+            { kind = Less_equal; line } :: scan_tokens_aux line (pos + 2)
+          else { kind = Less; line } :: scan_tokens_aux line (pos + 1)
       | '/' ->
           let rec skip_comment l p =
             if is_at_end p then (l, p)
@@ -70,7 +70,7 @@ let scan_tokens code =
           if next_is '/' then
             let new_line, new_pos = skip_comment line (pos + 1) in
             scan_tokens_aux new_line new_pos
-          else (Slash, line) :: scan_tokens_aux line (pos + 1)
+          else { kind = Slash; line } :: scan_tokens_aux line (pos + 1)
       | ' ' | '\r' | '\t' -> scan_tokens_aux line (pos + 1)
       | '\n' -> scan_tokens_aux (line + 1) (pos + 1)
       | '"' ->
@@ -80,7 +80,8 @@ let scan_tokens code =
             | x -> extract_text (p + 1) (acc @ [ x ])
           in
           let inc_pos, acc = extract_text (pos + 1) [] in
-          (String_t (chars_to_string acc), line) :: scan_tokens_aux inc_pos line
+          { kind = String_t (chars_to_string acc); line }
+          :: scan_tokens_aux inc_pos line
       | '0' .. '9' as m ->
           let rec extract_digits p =
             if is_at_end p then []
@@ -90,7 +91,7 @@ let scan_tokens code =
               | _ -> []
           in
           let dig = extract_digits (pos + 1) in
-          (Number (char_list_to_float (m :: dig)), 1)
+          { kind = Number (char_list_to_float (m :: dig)); line = 1 }
           :: scan_tokens_aux line (pos + List.length dig + 1)
       | ('a' .. 'z' | 'A' .. 'Z') as k ->
           (* handle identifer *)
@@ -108,7 +109,7 @@ let scan_tokens code =
           let result_token =
             match keyword with Some x -> x | None -> Identifier lookup_word
           in
-          (result_token, line)
+          { kind = result_token; line }
           :: scan_tokens_aux line (pos + List.length word + 1)
       | x ->
           print_endline ("Character " ^ String.make 1 x ^ " isn't a known token");
@@ -118,17 +119,22 @@ let scan_tokens code =
 
 let rec get_tokens_strings = function
   | [] -> ""
-  | (tok, _) :: rest -> (tok |> token_to_string) ^ "|" ^ get_tokens_strings rest
+  | { kind = tok; _ } :: rest ->
+      (tok |> token_to_string) ^ "|" ^ get_tokens_strings rest
 
 let single_token_check tk tokens =
-  match tokens with [ (k, _); (e, _) ] -> k = tk && e = EOF | _ -> false
+  match tokens with
+  | [ { kind = k; _ }; { kind = e; _ } ] -> k = tk && e = EOF
+  | _ -> false
 
 let is_end_of_file tokens =
-  match tokens with [ (e, _) ] -> e = EOF | _ -> false
+  match tokens with [ { kind = e; _ } ] -> e = EOF | _ -> false
 
 let%test _ =
   let res = scan_tokens "\"jumanji\"" in
-  List.hd res |> function String_t name, _ -> name = "jumanji" | _ -> false
+  List.hd res |> function
+  | { kind = String_t name; _ } -> name = "jumanji"
+  | _ -> false
 
 let%test _ = scan_tokens "(" |> single_token_check Left_paren
 let%test _ = scan_tokens ">=" |> single_token_check Greater_equal

@@ -40,10 +40,9 @@ type token_kind =
   | Var
   | While
   | EOF
-[@@deriving show]
 
 (* type token = Token : (token_kind * int) -> token *)
-type token = token_kind * int
+type token = {kind : token_kind; line : int}
 
 let rec skip_until_newline chars =
   match chars with
@@ -125,3 +124,6 @@ let token_to_string = function
   | Var -> "Var"
   | While -> "While"
   | EOF -> "EOF"
+
+let show_token (t, n) =
+  "Token: " ^ token_to_string t ^ " line: " ^ string_of_float n

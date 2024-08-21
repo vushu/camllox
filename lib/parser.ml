@@ -1,5 +1,6 @@
 open Tokens
 open Ast
+open Lox_values
 
 exception ParseException of string
 
@@ -7,18 +8,22 @@ let consume tk message = function
   | [] ->
       print_endline "List is empty.";
       raise (ParseException message)
-  | (kind, _) :: xs -> if kind = tk then xs else raise (ParseException message)
+  | { kind; _ } :: xs ->
+      if kind = tk then xs else raise (ParseException message)
 
 let rec primary = function
-  | [] -> (Literal_expr (String_t "FAILED"), [])
-  | (((False | True | Nil) as t), _) :: rest -> (Literal_expr t, rest)
-  | (((String_t _ | Number _) as t), _) :: rest -> (Literal_expr t, rest)
-  | ((Identifier _, _) as t) :: rest -> (Variable_expr t, rest)
+  | [] -> (Literal_expr (String "FAILED"), [])
+  | { kind = False; line = _ } :: rest -> (Literal_expr (Bool false), rest)
+  | { kind = True; line = _ } :: rest -> (Literal_expr (Bool true), rest)
+  | { kind = Nil; line = _ } :: rest -> (Literal_expr No_literal, rest)
+  | { kind = String_t x; line = _ } :: rest -> (Literal_expr (String x), rest)
+  | { kind = Number x; _ } :: rest -> (Literal_expr (Number x), rest)
+  | ({ kind = Identifier _; line = _ } as t) :: rest -> (Variable_expr t, rest)
   (* Grouping *)
-  | (Left_paren, _) :: rest -> (
+  | { kind = Left_paren; line = _ } :: rest -> (
       let e, r = expression rest in
       match r with
-      | (Right_paren, _) :: r ->
+      | { kind = Right_paren; line = _ } :: r ->
           (* print_endline "Created Group expression succesfully"; *)
           (Group_expr e, r)
       | _ -> raise (ParseException "Failed to parse group expression"))
@@ -26,13 +31,13 @@ let rec primary = function
 
 and finish_call callee tokens =
   match tokens with
-  | ((Right_paren, _) as t) :: rest -> (callee, t :: rest)
+  | ({ kind = Right_paren; line = _ } as t) :: rest -> (callee, t :: rest)
   | arg ->
       let rec consume_args args toks =
         let e, r = expression toks in
         r |> function
-        | (Comma, _) :: r -> consume_args (args @ [ e ]) r
-        | ((Right_paren, _) as t) :: r ->
+        | { kind = Comma; line = _ } :: r -> consume_args (args @ [ e ]) r
+        | ({ kind = Right_paren; _ } as t) :: r ->
             (Call_expr { callee; paren = t; args }, r)
         | _ -> raise (ParseException "Expected ')' after arguments")
       in
@@ -40,10 +45,12 @@ and finish_call callee tokens =
 
 and call tokens =
   let e, r = primary tokens in
-  match r with (Left_paren, _) :: r -> finish_call e r | all -> (e, all)
+  match r with
+  | { kind = Left_paren; _ } :: r -> finish_call e r
+  | all -> (e, all)
 
 and unary = function
-  | (((Bang | Minus), _) as t) :: rest ->
+  | ({ kind = Bang | Minus; _ } as t) :: rest ->
       let right, r = unary rest in
       (Unary_expr { op = t; right }, r)
   | x -> call x
@@ -51,7 +58,7 @@ and unary = function
 and factor tokens =
   let left, r = unary tokens in
   match r with
-  | (((Slash | Star), _) as t) :: rest ->
+  | ({ kind = Slash | Star; _ } as t) :: rest ->
       let right, r = unary rest in
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -59,7 +66,7 @@ and factor tokens =
 and term tokens =
   let left, r = factor tokens in
   match r with
-  | (((Minus | Plus), _) as t) :: r ->
+  | ({ kind = Minus | Plus; _ } as t) :: r ->
       let right, r = factor r in
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -67,7 +74,7 @@ and term tokens =
 and comparison tokens =
   let left, r = term tokens in
   match r with
-  | (((Greater | Greater_equal | Less | Less_equal), _) as t) :: r ->
+  | ({ kind = Greater | Greater_equal | Less | Less_equal; _ } as t) :: r ->
       let right, r = factor r in
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -75,7 +82,7 @@ and comparison tokens =
 and equality tokens =
   let left, r = comparison tokens in
   match r with
-  | (((Bang_equal | Equal_equal), _) as t) :: r ->
+  | ({ kind = Bang_equal | Equal_equal; _ } as t) :: r ->
       let right, r = comparison r in
       (Binary_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -83,7 +90,7 @@ and equality tokens =
 and and_expression tokens =
   let left, r = equality tokens in
   match r with
-  | ((And, _) as t) :: r ->
+  | ({ kind = And; _ } as t) :: r ->
       let right, r = equality r in
       (Logical_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -91,7 +98,7 @@ and and_expression tokens =
 and or_expression tokens =
   let left, r = and_expression tokens in
   match r with
-  | ((Or, _) as t) :: r ->
+  | ({ kind = Or; _ } as t) :: r ->
       let right, r = and_expression r in
       (Logical_expr { op = t; left; right }, r)
   | _ -> (left, r)
@@ -99,7 +106,7 @@ and or_expression tokens =
 and assigment tokens =
   let e, r = or_expression tokens in
   match r with
-  | ((Equal as tk), _) :: r -> (
+  | { kind = Equal as tk; _ } :: r -> (
       let value, r = assigment r in
       match e with
       | Variable_expr n -> (Assign_expr { name = n; value }, r)
@@ -113,9 +120,9 @@ and expression tokens = assigment tokens
 
 and var_declaration tokens =
   match tokens with
-  | ((Identifier _, _) as name) :: r -> (
+  | ({ kind = Identifier _; _ } as name) :: r -> (
       r |> function
-      | (Equal, _) :: r ->
+      | { kind = Equal; _ } :: r ->
           let e, r = expression r in
           let r =
             consume Semicolon "Expected ';' after variable declaration." r
@@ -125,7 +132,7 @@ and var_declaration tokens =
   | _ -> raise (ParseException "Expect variable name.")
 
 and declaration = function
-  | (Var, 1) :: rest -> var_declaration rest
+  | { kind = Var; line = 1 } :: rest -> var_declaration rest
   | x -> statement x
 
 and expression_statement tokens =
@@ -142,7 +149,7 @@ and block tokens =
   let rec get_statements stmts toks =
     match toks with
     | [] -> raise (ParseException "Expected '}' after block.")
-    | (Right_brace, _) :: rest -> (stmts, rest)
+    | { kind = Right_brace; _ } :: rest -> (stmts, rest)
     | x ->
         let s, r = declaration x in
         get_statements (stmts @ [ s ]) r
@@ -156,7 +163,7 @@ and if_statement tokens =
   (* Then branch *)
   let then_branch, r = statement r in
   match r with
-  | (Else, _) :: r ->
+  | { kind = Else; _ } :: r ->
       let else_branch, r = statement r in
       (If_stmt { cond; then_branch; else_branch = Some else_branch }, r)
   | x -> (If_stmt { cond; then_branch; else_branch = None }, x)
@@ -173,8 +180,8 @@ and while_statement tokens =
 and for_statement tokens =
   let init, r =
     consume Left_paren "Expected '(' after 'for'." tokens |> function
-    | (Semicolon, _) :: r -> (None, r)
-    | (Var, __) :: r ->
+    | { kind = Semicolon; _ } :: r -> (None, r)
+    | { kind = Var; _ } :: r ->
         let e, r = var_declaration r in
         (Some e, r)
     | x ->
@@ -183,7 +190,7 @@ and for_statement tokens =
   in
   let cond, r =
     match r with
-    | ((Semicolon, _) as t) :: r -> (None, t :: r)
+    | ({ kind = Semicolon; _ } as t) :: r -> (None, t :: r)
     | x ->
         let e, r = expression x in
         (Some e, r)
@@ -192,7 +199,7 @@ and for_statement tokens =
   let increment, r =
     match r with
     | [] -> raise (ParseException "Expected ')' after for clauses.")
-    | (Right_paren, _) :: r -> (None, r)
+    | { kind = Right_paren; _ } :: r -> (None, r)
     | x ->
         let e, r = expression x in
         (Some e, r)
@@ -207,7 +214,8 @@ and for_statement tokens =
   in
 
   let body =
-    if Option.is_none cond then While_stmt { cond = Literal_expr True; body }
+    if Option.is_none cond then
+      While_stmt { cond = Literal_expr (Bool true); body }
     else While_stmt { cond = Option.get cond; body }
   in
 
@@ -217,20 +225,20 @@ and for_statement tokens =
   (body, r)
 
 and statement = function
-  | (Print, _) :: r -> print_statement r
-  | (Left_brace, _) :: r ->
+  | { kind = Print; _ } :: r -> print_statement r
+  | { kind = Left_brace; _ } :: r ->
       let stmts, r = block r in
       (Block_stmt stmts, r)
-  | (If, _) :: r -> if_statement r
-  | (While, _) :: r -> while_statement r
-  | (For, _) :: r -> for_statement r
+  | { kind = If; _ } :: r -> if_statement r
+  | { kind = While; _ } :: r -> while_statement r
+  | { kind = For; _ } :: r -> for_statement r
   | x -> expression_statement x
 
 let parse tokens =
   let rec get_statements stmts toks =
     match toks with
     | [] -> stmts
-    | [ (EOF, _) ] -> stmts
+    | [ { kind = EOF; _ } ] -> stmts
     | xs ->
         let s, r = declaration xs in
         get_statements (stmts @ [ s ]) r
@@ -238,45 +246,85 @@ let parse tokens =
   get_statements [] tokens
 
 let%test _ =
-  let exprs, _ = unary [ (Minus, 1); (Number 1., 1) ] in
-  match exprs with Unary_expr { op; _ } -> op = (Minus, 1) | _ -> false
+  let exprs, _ =
+    unary [ { kind = Minus; line = 1 }; { kind = Number 1.; line = 1 } ]
+  in
+  match exprs with
+  | Unary_expr { op; _ } -> op = { kind = Minus; line = 1 }
+  | _ -> false
 
 let%test _ =
-  let exprs, _ = term [ (Number 1., 1); (Plus, 1); (Number 1., 1) ] in
-  match exprs with Binary_expr { op; _ } -> op = (Plus, 1) | _ -> false
+  let exprs, _ =
+    term
+      [
+        { kind = Number 1.; line = 1 };
+        { kind = Plus; line = 1 };
+        { kind = Number 1.; line = 1 };
+      ]
+  in
+  match exprs with
+  | Binary_expr { op; _ } -> op = { kind = Plus; line = 1 }
+  | _ -> false
 
 let%test _ =
-  let exprs, _ = and_expression [ (True, 1); (And, 1); (True, 1) ] in
-  match exprs with Logical_expr { op; _ } -> op = (And, 1) | _ -> false
+  let exprs, _ =
+    and_expression
+      [
+        { kind = True; line = 1 };
+        { kind = And; line = 1 };
+        { kind = True; line = 1 };
+      ]
+  in
+  match exprs with
+  | Logical_expr { op; _ } -> op = { kind = And; line = 1 }
+  | _ -> false
 
 let%test _ =
   try
-    let exprs, _ = primary [ (Left_paren, 1); (True, 1); (Right_paren, 1) ] in
+    let exprs, _ =
+      primary
+        [
+          { kind = Left_paren; line = 1 };
+          { kind = True; line = 1 };
+          { kind = Right_paren; line = 1 };
+        ]
+    in
     match exprs with Group_expr _ -> true | _ -> false
   with ParseException msg ->
     print_endline msg;
     false
 
 let%test _ =
-  let stmts = var_declaration [ (Identifier "Mama", 1) ] in
+  let stmts = var_declaration [ { kind = Identifier "Mama"; line = 1 } ] in
   match stmts with
   | Var_stmt { name; init }, _ ->
-      name = (Identifier "Mama", 1) && Option.is_none init
+      name = { kind = Identifier "Mama"; line = 1 } && Option.is_none init
   | _ -> false
 
 let%test _ =
   let stmts =
     var_declaration
-      [ (Identifier "Mama", 1); (Equal, 1); (Number 1., 1); (Semicolon, 1) ]
+      [
+        { kind = Identifier "Mama"; line = 1 };
+        { kind = Equal; line = 1 };
+        { kind = Number 1.; line = 1 };
+        { kind = Semicolon; line = 1 };
+      ]
   in
   match stmts with
   | Var_stmt { name; init }, _ ->
-      name = (Identifier "Mama", 1) && Option.is_some init
+      name = { kind = Identifier "Mama"; line = 1 } && Option.is_some init
   | _ -> false
 
 let%test _ =
   let stmts =
-    parse [ (Identifier "Mama", 1); (Equal, 1); (Number 1., 1); (Semicolon, 1) ]
+    parse
+      [
+        { kind = Identifier "Mama"; line = 1 };
+        { kind = Equal; line = 1 };
+        { kind = Number 1.; line = 1 };
+        { kind = Semicolon; line = 1 };
+      ]
     |> List.hd
   in
   match stmts with Expression_stmt (Assign_expr _) -> true | _ -> false
@@ -285,17 +333,17 @@ let%test _ =
   let stmts =
     parse
       [
-        (If, 1);
-        (Left_paren, 1);
-        (True, 1);
-        (Right_paren, 1);
-        (Left_brace, 1);
-        (Identifier "hej", 1);
-        (Semicolon, 1);
-        (Right_brace, 1);
-        (Else, 1);
-        (Left_brace, 1);
-        (Right_brace, 1);
+        { kind = If; line = 1 };
+        { kind = Left_paren; line = 1 };
+        { kind = True; line = 1 };
+        { kind = Right_paren; line = 1 };
+        { kind = Left_brace; line = 1 };
+        { kind = Identifier "hej"; line = 1 };
+        { kind = Semicolon; line = 1 };
+        { kind = Right_brace; line = 1 };
+        { kind = Else; line = 1 };
+        { kind = Left_brace; line = 1 };
+        { kind = Right_brace; line = 1 };
       ]
     |> List.hd
   in
@@ -308,14 +356,14 @@ let%test _ =
   let stmts =
     parse
       [
-        (If, 1);
-        (Left_paren, 1);
-        (True, 1);
-        (Right_paren, 1);
-        (Left_brace, 1);
-        (Identifier "hej", 1);
-        (Semicolon, 1);
-        (Right_brace, 1);
+        { kind = If; line = 1 };
+        { kind = Left_paren; line = 1 };
+        { kind = True; line = 1 };
+        { kind = Right_paren; line = 1 };
+        { kind = Left_brace; line = 1 };
+        { kind = Identifier "hej"; line = 1 };
+        { kind = Semicolon; line = 1 };
+        { kind = Right_brace; line = 1 };
       ]
     |> List.hd
   in
@@ -325,14 +373,14 @@ let%test _ =
   let stmts =
     parse
       [
-        (If, 1);
-        (Left_paren, 1);
-        (True, 1);
-        (Right_paren, 1);
-        (Left_brace, 1);
-        (Identifier "hej", 1);
-        (Semicolon, 1);
-        (Right_brace, 1);
+        { kind = If; line = 1 };
+        { kind = Left_paren; line = 1 };
+        { kind = True; line = 1 };
+        { kind = Right_paren; line = 1 };
+        { kind = Left_brace; line = 1 };
+        { kind = Identifier "hej"; line = 1 };
+        { kind = Semicolon; line = 1 };
+        { kind = Right_brace; line = 1 };
       ]
     |> List.hd
   in
@@ -342,7 +390,10 @@ let%test _ =
   let stmts =
     parse
       [
-        (Left_brace, 1); (Identifier "hej", 1); (Semicolon, 1); (Right_brace, 1);
+        { kind = Left_brace; line = 1 };
+        { kind = Identifier "hej"; line = 1 };
+        { kind = Semicolon; line = 1 };
+        { kind = Right_brace; line = 1 };
       ]
     |> List.hd
   in
@@ -350,7 +401,13 @@ let%test _ =
 
 let%test _ =
   let stmts =
-    parse [ (Print, 1); (Identifier "hej", 1); (Semicolon, 1) ] |> List.hd
+    parse
+      [
+        { kind = Print; line = 1 };
+        { kind = Identifier "hej"; line = 1 };
+        { kind = Semicolon; line = 1 };
+      ]
+    |> List.hd
   in
   match stmts with Print_stmt _ -> true | _ -> false
 
@@ -358,13 +415,13 @@ let%test _ =
   let stmts =
     parse
       [
-        (While, 1);
-        (Left_paren, 1);
-        (True, 1);
-        (Right_paren, 1);
-        (Print, 1);
-        (Identifier "hej", 1);
-        (Semicolon, 1);
+        { kind = While; line = 1 };
+        { kind = Left_paren; line = 1 };
+        { kind = True; line = 1 };
+        { kind = Right_paren; line = 1 };
+        { kind = Print; line = 1 };
+        { kind = Identifier "hej"; line = 1 };
+        { kind = Semicolon; line = 1 };
       ]
     |> List.hd
   in
@@ -374,13 +431,13 @@ let%test _ =
   let stmts =
     parse
       [
-        (For, 1);
-        (Left_paren, 1);
-        (Semicolon, 1);
-        (Semicolon, 1);
-        (Right_paren, 1);
-        (Left_brace, 1);
-        (Right_brace, 1);
+        { kind = For; line = 1 };
+        { kind = Left_paren; line = 1 };
+        { kind = Semicolon; line = 1 };
+        { kind = Semicolon; line = 1 };
+        { kind = Right_paren; line = 1 };
+        { kind = Left_brace; line = 1 };
+        { kind = Right_brace; line = 1 };
       ]
     |> List.hd
   in
@@ -390,17 +447,17 @@ let%test _ =
   let stmts =
     parse
       [
-        (For, 1);
-        (Left_paren, 1);
-        (Var, 1);
-        (Identifier "my_var", 1);
-        (Equal, 1);
-        (Number 0., 1);
-        (Semicolon, 1);
-        (Semicolon, 1);
-        (Right_paren, 1);
-        (Left_brace, 1);
-        (Right_brace, 1);
+        { kind = For; line = 1 };
+        { kind = Left_paren; line = 1 };
+        { kind = Var; line = 1 };
+        { kind = Identifier "my_var"; line = 1 };
+        { kind = Equal; line = 1 };
+        { kind = Number 0.; line = 1 };
+        { kind = Semicolon; line = 1 };
+        { kind = Semicolon; line = 1 };
+        { kind = Right_paren; line = 1 };
+        { kind = Left_brace; line = 1 };
+        { kind = Right_brace; line = 1 };
       ]
     |> List.hd
   in

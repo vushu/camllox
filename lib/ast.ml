@@ -1,11 +1,12 @@
 open Tokens
+open Lox_values
 
 type expr =
   | Unary_expr of { op : token; right : expr }
   | Binary_expr of { left : expr; op : token; right : expr }
   | Logical_expr of { left : expr; op : token; right : expr }
   | Group_expr of expr
-  | Literal_expr of token_kind
+  | Literal_expr of literal
   | Variable_expr of token
   | Call_expr of { callee : expr; paren : token; args : expr list }
   | Assign_expr of { name : token; value : expr }
