@@ -10,22 +10,52 @@ let is_truthy = function
   | _ -> true
 
 let check_number_operand = function
-  | Lox_literal (Number_literal _ as l) -> l
-  | _ -> raise (RuntimeException "Operand must be number not: ")
+  | Lox_literal (Number_literal x) -> x
+  | _ -> raise (RuntimeException "Operand must be number.")
 
 let rec evaluate statement =
   match statement with
   | Unary_expr { op = { kind; _ }; right } -> eval_unary_expr kind right
+  | Literal_expr l -> Lox_literal l
+  | Group_expr e -> evaluate e
+  | Binary_expr { left; op = { kind; _ }; right } ->
+      eval_binary_expr left kind right
   | _ -> No_primitive
+
+and add_or_concat (type a) (literal : a literal) (x : a) (y : a) : lox_primitive
+    =
+  match literal with
+  | Number_literal _ -> Lox_literal (Number_literal (x +. y))
+  | String_literal _ -> Lox_literal (String_literal (x ^ y))
+  | _ -> raise (RuntimeException "Operands must be two numbers or two strings.")
+
+and eval_binary_expr left kind right =
+  let eval_left = evaluate left in
+  let eval_right = evaluate right in
+  let literal =
+    match kind with
+    | Minus ->
+        Lox_literal
+          (Number_literal
+             (check_number_operand eval_left -. check_number_operand eval_right))
+    | Slash ->
+        Lox_literal
+          (Number_literal
+             (check_number_operand eval_left /. check_number_operand eval_right))
+    | Star ->
+        Lox_literal
+          (Number_literal
+             (check_number_operand eval_left *. check_number_operand eval_right))
+    | Plus -> No_primitive (* add_or_concat eval_left eval_right *)
+    | _ -> No_primitive
+  in
+  literal
 
 and eval_unary_expr tk right =
   let primitive = evaluate right in
   match tk with
   | Bang -> Lox_literal (Bool_literal (is_truthy primitive))
-  | Minus -> (
-      check_number_operand primitive |> function
-      | Number_literal x -> Lox_literal (Number_literal (x *. -1.))
-      | No_literal -> No_primitive)
+  | Minus -> Lox_literal (Number_literal (-.check_number_operand primitive))
   | _ -> No_primitive
 
 (* | Variable_expr (_, _) -> No_primitive *)
@@ -85,12 +115,12 @@ let%test _ =
   true
 
 let%test _ =
-  let _res =
+  let res =
     evaluate
       (Unary_expr
          {
-           op = { kind = Plus; line = 1 };
+           op = { kind = Minus; line = 1 };
            right = Literal_expr (Number_literal 1.);
          })
   in
-  true
+  res |> function Lox_literal (Number_literal x) -> x = -1. | _ -> false
