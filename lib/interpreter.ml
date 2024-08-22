@@ -5,12 +5,12 @@ open Lox_values
 exception RuntimeException of string
 
 let is_truthy = function
-  | Literal No_literal -> false
-  | Literal (Bool x) -> x
+  | No_primitive -> false
+  | Lox_literal (Bool_literal x) -> x
   | _ -> true
 
 let check_number_operand = function
-  | Literal (Number _) as l -> l
+  | Lox_literal (Number_literal _ as l) -> l
   | _ -> raise (RuntimeException "Operand must be number not: ")
 
 let rec evaluate statement =
@@ -21,8 +21,11 @@ let rec evaluate statement =
 and eval_unary_expr tk right =
   let primitive = evaluate right in
   match tk with
-  | Bang -> Literal (Bool (is_truthy primitive))
-  | Minus -> check_number_operand primitive
+  | Bang -> Lox_literal (Bool_literal (is_truthy primitive))
+  | Minus -> (
+      check_number_operand primitive |> function
+      | Number_literal x -> Lox_literal (Number_literal (x *. -1.))
+      | No_literal -> No_primitive)
   | _ -> No_primitive
 
 (* | Variable_expr (_, _) -> No_primitive *)
@@ -50,7 +53,7 @@ let%test _ =
     evaluate
       (Call_expr
          {
-           callee = Literal_expr (Bool true);
+           callee = Literal_expr (Bool_literal true);
            paren = { kind = Right_paren; line = 1 };
            args = [];
          })
@@ -68,7 +71,7 @@ let%test _ =
          (Assign_expr
             {
               name = { kind = Right_paren; line = 1 };
-              value = Literal_expr (Bool true);
+              value = Literal_expr (Bool_literal true);
             }))
   in
   true
@@ -78,13 +81,16 @@ let%test _ =
   true
 
 let%test _ =
-  let _res = evaluate (Literal_expr (Number 1.)) in
+  let _res = evaluate (Literal_expr (Number_literal 1.)) in
   true
 
 let%test _ =
   let _res =
     evaluate
       (Unary_expr
-         { op = { kind = Plus; line = 1 }; right = Literal_expr (Number 1.) })
+         {
+           op = { kind = Plus; line = 1 };
+           right = Literal_expr (Number_literal 1.);
+         })
   in
   true

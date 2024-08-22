@@ -12,12 +12,14 @@ let consume tk message = function
       if kind = tk then xs else raise (ParseException message)
 
 let rec primary = function
-  | [] -> (Literal_expr (String "FAILED"), [])
-  | { kind = False; line = _ } :: rest -> (Literal_expr (Bool false), rest)
-  | { kind = True; line = _ } :: rest -> (Literal_expr (Bool true), rest)
+  | [] -> (Literal_expr (String_literal "FAILED"), [])
+  | { kind = False; line = _ } :: rest ->
+      (Literal_expr (Bool_literal false), rest)
+  | { kind = True; line = _ } :: rest -> (Literal_expr (Bool_literal true), rest)
   | { kind = Nil; line = _ } :: rest -> (Literal_expr No_literal, rest)
-  | { kind = String_t x; line = _ } :: rest -> (Literal_expr (String x), rest)
-  | { kind = Number x; _ } :: rest -> (Literal_expr (Number x), rest)
+  | { kind = String_t x; line = _ } :: rest ->
+      (Literal_expr (String_literal x), rest)
+  | { kind = Number x; _ } :: rest -> (Literal_expr (Number_literal x), rest)
   | ({ kind = Identifier _; line = _ } as t) :: rest -> (Variable_expr t, rest)
   (* Grouping *)
   | { kind = Left_paren; line = _ } :: rest -> (
@@ -215,7 +217,7 @@ and for_statement tokens =
 
   let body =
     if Option.is_none cond then
-      While_stmt { cond = Literal_expr (Bool true); body }
+      While_stmt { cond = Literal_expr (Bool_literal true); body }
     else While_stmt { cond = Option.get cond; body }
   in
 
