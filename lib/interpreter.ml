@@ -1,6 +1,6 @@
+open Lox_values
 open Tokens
 open Ast
-open Lox_values
 
 exception RuntimeException of string
 
@@ -22,17 +22,24 @@ let rec evaluate statement =
       eval_binary_expr left kind right
   | _ -> No_primitive
 
-and add_or_concat (type a) (literal : a literal) (x : a) (y : a) : lox_primitive
-    =
-  match literal with
-  | Number_literal _ -> Lox_literal (Number_literal (x +. y))
-  | String_literal _ -> Lox_literal (String_literal (x ^ y))
+(* let add_or_concat (type a) (literal : a literal) (x : a) (y : a) : lox_primitive
+     =
+   match literal with
+   | Number_literal _ -> Lox_literal (Number_literal (x +. y))
+   | String_literal _ -> Lox_literal (String_literal (x ^ y))
+   | _ -> raise (RuntimeException "Operands must be two numbers or two strings.") *)
+
+and add_or_concat x y =
+  match (x, y) with
+  | Lox_literal (Number_literal x), Lox_literal (Number_literal y) ->
+      Lox_literal (Number_literal (x +. y))
+  | Lox_literal (String_literal x), Lox_literal (String_literal y) ->
+      Lox_literal (String_literal (x ^ y))
   | _ -> raise (RuntimeException "Operands must be two numbers or two strings.")
 
-and eval_binary_expr left kind right =
+and eval_binary_expr (left : expr) (kind : token_kind) (right : expr) =
   let eval_left = evaluate left in
   let eval_right = evaluate right in
-  let literal =
     match kind with
     | Minus ->
         Lox_literal
@@ -46,16 +53,38 @@ and eval_binary_expr left kind right =
         Lox_literal
           (Number_literal
              (check_number_operand eval_left *. check_number_operand eval_right))
-    | Plus -> No_primitive (* add_or_concat eval_left eval_right *)
-    | _ -> No_primitive
-  in
-  literal
+    | Plus -> add_or_concat eval_left eval_right
+    | Greater ->
+        Lox_literal
+          (Bool_literal
+             (check_number_operand eval_left > check_number_operand eval_right))
+    | Greater_equal ->
+        Lox_literal
+          (Bool_literal
+             (check_number_operand eval_left >= check_number_operand eval_right))
+    | Bang_equal ->
+        Lox_literal
+          (Bool_literal
+             (check_number_operand eval_left <> check_number_operand eval_right))
+    | Equal_equal ->
+        Lox_literal
+          (Bool_literal
+             (check_number_operand eval_left == check_number_operand eval_right))
+    | Less ->
+        Lox_literal
+          (Bool_literal
+             (check_number_operand eval_left < check_number_operand eval_right))
+    | Less_equal ->
+        Lox_literal
+          (Bool_literal
+             (check_number_operand eval_left <= check_number_operand eval_right))
+    | op -> raise (RuntimeException ("Unknown operator: " ^ token_to_string op))
 
-and eval_unary_expr tk right =
-  let primitive = evaluate right in
+and eval_unary_expr (tk : token_kind) (right : expr) =
+  let res = evaluate right in
   match tk with
-  | Bang -> Lox_literal (Bool_literal (is_truthy primitive))
-  | Minus -> Lox_literal (Number_literal (-.check_number_operand primitive))
+  | Bang -> Lox_literal (Bool_literal (is_truthy res))
+  | Minus -> Lox_literal (Number_literal (-.check_number_operand res))
   | _ -> No_primitive
 
 (* | Variable_expr (_, _) -> No_primitive *)
@@ -124,3 +153,44 @@ let%test _ =
          })
   in
   res |> function Lox_literal (Number_literal x) -> x = -1. | _ -> false
+
+let%test _ =
+  let expr =
+    Binary_expr
+      {
+        left = Literal_expr (Number_literal 1.);
+        op = { kind = Plus; line = 0 };
+        right = Literal_expr (Number_literal 2.);
+      }
+  in
+  evaluate expr |> function
+  | Lox_literal (Number_literal x) -> x = 3.
+  | _ -> false
+
+let%test _ =
+  let expr =
+    Binary_expr
+      {
+        left = Literal_expr (String_literal "ab");
+        op = { kind = Plus; line = 0 };
+        right = Literal_expr (String_literal "cd");
+      }
+  in
+  evaluate expr |> function
+  | Lox_literal (String_literal x) -> x = "abcd"
+  | _ -> false
+
+let%test _ =
+  let expr =
+    Binary_expr
+      {
+        left = Literal_expr (Number_literal 3.);
+        op = { kind = Star; line = 0 };
+        right = Literal_expr (Number_literal 3.);
+      }
+  in
+  evaluate expr |> function
+  | Lox_literal (Number_literal x) -> x = 9.
+  | _ -> false
+
+(* type token = {kind : token_kind; line : int} *)
