@@ -1,8 +1,13 @@
 open Lox_values
 open Tokens
 open Ast
+open Environment
 
 exception RuntimeException of string
+
+module LoxEnv = MakeEnv (BaseEnv)
+
+let environment = LoxEnv.create None
 
 let is_truthy = function
   | No_primitive -> false
@@ -13,13 +18,26 @@ let check_number_operand = function
   | Lox_literal (Number_literal x) -> x
   | _ -> raise (RuntimeException "Operand must be number.")
 
-let rec evaluate statement =
+let rec evaluate_statement statement =
+  match statement with
+  | Expression_stmt e -> evaluate e
+  | Var_stmt { name; init } -> (
+      match (name, init) with
+      | { kind = Identifier n; line = _ }, Some e ->
+          LoxEnv.define environment n (evaluate e);
+          No_primitive
+      | _ -> raise (RuntimeException "Failed"))
+  | _ -> No_primitive
+
+and evaluate statement =
   match statement with
   | Unary_expr { op = { kind; _ }; right } -> eval_unary_expr kind right
   | Literal_expr l -> Lox_literal l
   | Group_expr e -> evaluate e
   | Binary_expr { left; op = { kind; _ }; right } ->
       eval_binary_expr left kind right
+  | Logical_expr { left; op = { kind; _ }; right } ->
+      eval_logical_expr left kind right
   | _ -> No_primitive
 
 (* let add_or_concat (type a) (literal : a literal) (x : a) (y : a) : lox_primitive
@@ -40,45 +58,52 @@ and add_or_concat x y =
 and eval_binary_expr (left : expr) (kind : token_kind) (right : expr) =
   let eval_left = evaluate left in
   let eval_right = evaluate right in
-    match kind with
-    | Minus ->
-        Lox_literal
-          (Number_literal
-             (check_number_operand eval_left -. check_number_operand eval_right))
-    | Slash ->
-        Lox_literal
-          (Number_literal
-             (check_number_operand eval_left /. check_number_operand eval_right))
-    | Star ->
-        Lox_literal
-          (Number_literal
-             (check_number_operand eval_left *. check_number_operand eval_right))
-    | Plus -> add_or_concat eval_left eval_right
-    | Greater ->
-        Lox_literal
-          (Bool_literal
-             (check_number_operand eval_left > check_number_operand eval_right))
-    | Greater_equal ->
-        Lox_literal
-          (Bool_literal
-             (check_number_operand eval_left >= check_number_operand eval_right))
-    | Bang_equal ->
-        Lox_literal
-          (Bool_literal
-             (check_number_operand eval_left <> check_number_operand eval_right))
-    | Equal_equal ->
-        Lox_literal
-          (Bool_literal
-             (check_number_operand eval_left == check_number_operand eval_right))
-    | Less ->
-        Lox_literal
-          (Bool_literal
-             (check_number_operand eval_left < check_number_operand eval_right))
-    | Less_equal ->
-        Lox_literal
-          (Bool_literal
-             (check_number_operand eval_left <= check_number_operand eval_right))
-    | op -> raise (RuntimeException ("Unknown operator: " ^ token_to_string op))
+  match kind with
+  | Minus ->
+      Lox_literal
+        (Number_literal
+           (check_number_operand eval_left -. check_number_operand eval_right))
+  | Slash ->
+      Lox_literal
+        (Number_literal
+           (check_number_operand eval_left /. check_number_operand eval_right))
+  | Star ->
+      Lox_literal
+        (Number_literal
+           (check_number_operand eval_left *. check_number_operand eval_right))
+  | Plus -> add_or_concat eval_left eval_right
+  | Greater ->
+      Lox_literal
+        (Bool_literal
+           (check_number_operand eval_left > check_number_operand eval_right))
+  | Greater_equal ->
+      Lox_literal
+        (Bool_literal
+           (check_number_operand eval_left >= check_number_operand eval_right))
+  | Bang_equal ->
+      Lox_literal
+        (Bool_literal
+           (check_number_operand eval_left <> check_number_operand eval_right))
+  | Equal_equal ->
+      Lox_literal
+        (Bool_literal
+           (check_number_operand eval_left == check_number_operand eval_right))
+  | Less ->
+      Lox_literal
+        (Bool_literal
+           (check_number_operand eval_left < check_number_operand eval_right))
+  | Less_equal ->
+      Lox_literal
+        (Bool_literal
+           (check_number_operand eval_left <= check_number_operand eval_right))
+  | op -> raise (RuntimeException ("Unknown operator: " ^ token_to_string op))
+
+and eval_logical_expr left tk right =
+  let eval_left = evaluate left in
+  match tk with
+  | Or -> if is_truthy eval_left then eval_left else evaluate right
+  | And -> if not (is_truthy eval_left) then eval_left else evaluate right
+  | _ -> Lox_literal (Bool_literal false)
 
 and eval_unary_expr (tk : token_kind) (right : expr) =
   let res = evaluate right in
@@ -100,8 +125,8 @@ and eval_unary_expr (tk : token_kind) (right : expr) =
 let interpret stmts =
   let rec interpret_aux = function
     | [] -> ()
-    | _ :: xs ->
-        (* let _prim = evaluate x in *)
+    | x :: xs ->
+        let _prim = evaluate_statement x in
         interpret_aux xs
   in
   let _res = interpret_aux stmts in
@@ -191,6 +216,19 @@ let%test _ =
   in
   evaluate expr |> function
   | Lox_literal (Number_literal x) -> x = 9.
+  | _ -> false
+
+let%test _ =
+  let expr =
+    Logical_expr
+      {
+        left = Literal_expr (Bool_literal false);
+        op = { kind = Or; line = 0 };
+        right = Literal_expr (Bool_literal true);
+      }
+  in
+  evaluate expr |> function
+  | Lox_literal (Bool_literal x) -> x = true
   | _ -> false
 
 (* type token = {kind : token_kind; line : int} *)

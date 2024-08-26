@@ -1,6 +1,6 @@
 (library
  (name camllox)
- (modules scanner tokens ast parser interpreter lox_values)
+ (modules scanner tokens ast parser interpreter lox_values environment)
  (inline_tests)
  (preprocess
   (pps ppx_inline_test)))
