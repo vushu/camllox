@@ -20,20 +20,27 @@ let check_number_operand = function
 
 let rec evaluate_statement statement =
   match statement with
-  | Expression_stmt e -> evaluate e
+  | Expression_stmt e -> evaluate_expr e
   | Var_stmt { name; init } -> (
       match (name, init) with
       | { kind = Identifier n; line = _ }, Some e ->
-          LoxEnv.define environment n (evaluate e);
+          print_endline ("Define var named: " ^ n);
+          LoxEnv.define environment n (evaluate_expr e);
+          (LoxEnv.get environment n |> function
+           | Some _ -> print_endline "YUP exists"
+           | None -> raise (RuntimeException "HUH nothing?"));
           No_primitive
       | _ -> raise (RuntimeException "Failed"))
+  | Print_stmt e ->
+      print_endline (primitive_as_string (evaluate_expr e));
+      No_primitive
   | _ -> No_primitive
 
-and evaluate statement =
+and evaluate_expr statement =
   match statement with
   | Unary_expr { op = { kind; _ }; right } -> eval_unary_expr kind right
   | Literal_expr l -> Lox_literal l
-  | Group_expr e -> evaluate e
+  | Group_expr e -> evaluate_expr e
   | Binary_expr { left; op = { kind; _ }; right } ->
       eval_binary_expr left kind right
   | Logical_expr { left; op = { kind; _ }; right } ->
@@ -56,8 +63,8 @@ and add_or_concat x y =
   | _ -> raise (RuntimeException "Operands must be two numbers or two strings.")
 
 and eval_binary_expr (left : expr) (kind : token_kind) (right : expr) =
-  let eval_left = evaluate left in
-  let eval_right = evaluate right in
+  let eval_left = evaluate_expr left in
+  let eval_right = evaluate_expr right in
   match kind with
   | Minus ->
       Lox_literal
@@ -99,14 +106,14 @@ and eval_binary_expr (left : expr) (kind : token_kind) (right : expr) =
   | op -> raise (RuntimeException ("Unknown operator: " ^ token_to_string op))
 
 and eval_logical_expr left tk right =
-  let eval_left = evaluate left in
+  let eval_left = evaluate_expr left in
   match tk with
-  | Or -> if is_truthy eval_left then eval_left else evaluate right
-  | And -> if not (is_truthy eval_left) then eval_left else evaluate right
+  | Or -> if is_truthy eval_left then eval_left else evaluate_expr right
+  | And -> if not (is_truthy eval_left) then eval_left else evaluate_expr right
   | _ -> Lox_literal (Bool_literal false)
 
 and eval_unary_expr (tk : token_kind) (right : expr) =
-  let res = evaluate right in
+  let res = evaluate_expr right in
   match tk with
   | Bang -> Lox_literal (Bool_literal (is_truthy res))
   | Minus -> Lox_literal (Number_literal (-.check_number_operand res))
@@ -134,7 +141,7 @@ let interpret stmts =
 
 let%test _ =
   let _res =
-    evaluate
+    evaluate_expr
       (Call_expr
          {
            callee = Literal_expr (Bool_literal true);
@@ -145,12 +152,12 @@ let%test _ =
   true
 
 let%test _ =
-  let _res = evaluate (Variable_expr { kind = Right_paren; line = 1 }) in
+  let _res = evaluate_expr (Variable_expr { kind = Right_paren; line = 1 }) in
   true
 
 let%test _ =
   let _res =
-    evaluate
+    evaluate_expr
       (Group_expr
          (Assign_expr
             {
@@ -161,16 +168,16 @@ let%test _ =
   true
 
 let%test _ =
-  let _res = evaluate (Variable_expr { kind = Right_paren; line = 1 }) in
+  let _res = evaluate_expr (Variable_expr { kind = Right_paren; line = 1 }) in
   true
 
 let%test _ =
-  let _res = evaluate (Literal_expr (Number_literal 1.)) in
+  let _res = evaluate_expr (Literal_expr (Number_literal 1.)) in
   true
 
 let%test _ =
   let res =
-    evaluate
+    evaluate_expr
       (Unary_expr
          {
            op = { kind = Minus; line = 1 };
@@ -188,7 +195,7 @@ let%test _ =
         right = Literal_expr (Number_literal 2.);
       }
   in
-  evaluate expr |> function
+  evaluate_expr expr |> function
   | Lox_literal (Number_literal x) -> x = 3.
   | _ -> false
 
@@ -201,7 +208,7 @@ let%test _ =
         right = Literal_expr (String_literal "cd");
       }
   in
-  evaluate expr |> function
+  evaluate_expr expr |> function
   | Lox_literal (String_literal x) -> x = "abcd"
   | _ -> false
 
@@ -214,7 +221,7 @@ let%test _ =
         right = Literal_expr (Number_literal 3.);
       }
   in
-  evaluate expr |> function
+  evaluate_expr expr |> function
   | Lox_literal (Number_literal x) -> x = 9.
   | _ -> false
 
@@ -227,8 +234,25 @@ let%test _ =
         right = Literal_expr (Bool_literal true);
       }
   in
-  evaluate expr |> function
+  evaluate_expr expr |> function
   | Lox_literal (Bool_literal x) -> x = true
   | _ -> false
 
+let%test _ =
+  let e = Literal_expr (Bool_literal false) in
+  let stmt =
+    Var_stmt { name = { kind = Identifier "Hello"; line = 0 }; init = Some e }
+  in
+  evaluate_statement stmt |> function No_primitive -> true | _ -> false
+
+let%test _ =
+  let e = Literal_expr (String_literal "This is a print line") in
+  let stmt = Print_stmt e in
+  evaluate_statement stmt |> function No_primitive -> true | _ -> false
+
+(* in
+   evaluate expr |> function
+   | Lox_literal (Bool_literal x) -> x = true
+   | _ -> false
+*)
 (* type token = {kind : token_kind; line : int} *)

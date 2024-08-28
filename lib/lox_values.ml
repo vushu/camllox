@@ -10,5 +10,11 @@ type lox_primitive =
   | Lox_literal : 'a literal -> lox_primitive
   | Lox_function : lox_function -> lox_primitive
   | No_primitive
-(* | Int_literal of string literal *)
-(* | No_literal *)
+
+let primitive_as_string = function
+  | Lox_literal (String_literal s) -> s
+  | Lox_literal (Bool_literal b) -> string_of_bool b
+  | Lox_literal (Number_literal f) -> string_of_float f
+  | Lox_literal No_literal -> "No literal"
+  | Lox_function _ -> "This is a function"
+  | No_primitive -> "No Literals"
