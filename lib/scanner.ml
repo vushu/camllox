@@ -18,6 +18,18 @@ let rec handle_number acc chars =
   | h :: t ->
       if h |> is_digit then handle_number (acc @ [ h ]) t else (acc, h :: t)
 
+let is_at_end code p = p >= String.length code
+
+let rec extract_decimals code p =
+  if is_at_end code p then []
+  else
+    match code.[p] with
+    | '0' .. '9' as d -> d :: extract_decimals code (p + 1)
+    | '.' ->
+        print_endline "Only 1 dot is allowed in decimals!";
+        []
+    | _ -> []
+
 let char_list_to_float char_list =
   (* Convert the character list to a string *)
   let str = String.of_seq (List.to_seq char_list) in
@@ -87,7 +99,8 @@ let scan_tokens code =
             if is_at_end p then []
             else
               match code.[p] with
-              | ('.' | '0' .. '9') as d -> d :: extract_digits (p + 1)
+              | '0' .. '9' as d -> d :: extract_digits (p + 1)
+              | '.' -> '.' :: extract_decimals code (p + 1)
               | _ -> []
           in
           let dig = extract_digits (pos + 1) in
@@ -125,7 +138,18 @@ let rec get_tokens_strings = function
 let single_token_check tk tokens =
   match tokens with
   | [ { kind = k; _ }; { kind = e; _ } ] -> k = tk && e = EOF
-  | _ -> false
+  | toks ->
+      let rec print_rest (tokens : token list) =
+        match tokens with
+        | [] -> ()
+        | x :: rest ->
+            print_endline (show_token x);
+            print_rest rest
+      in
+      print_endline "----------The Tokens --------";
+      print_rest toks;
+      print_endline "-----------------------------";
+      false
 
 let is_end_of_file tokens =
   match tokens with [ { kind = e; _ } ] -> e = EOF | _ -> false
@@ -141,6 +165,7 @@ let%test _ = scan_tokens ">=" |> single_token_check Greater_equal
 let%test _ = scan_tokens "//{}{}{}" |> is_end_of_file
 let%test _ = scan_tokens " \t\r==" |> single_token_check Equal_equal
 let%test _ = scan_tokens "4.23" |> single_token_check (Number 4.23)
+let%test _ = scan_tokens "4.232" |> single_token_check (Number 4.232)
 
 let%test _ =
   let acc, _ = handle_number [] (string_to_char_list "42.123") in
