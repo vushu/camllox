@@ -1,13 +1,17 @@
 open Lox_values
 open Tokens
 open Ast
-open Environment
+(* open Environment *)
 
 exception RuntimeException of string
 
-module LoxEnv = MakeEnv (BaseEnv)
+(* module LoxEnv = MakeEnv (BaseEnv) *)
+(* let environment = LoxEnv.create None *)
 
-let environment = LoxEnv.create None
+(* type lox_environment =  *)
+  (* Environment of { current : LoxEnv; enclosing : option LoxEnv; } *)
+
+(* let env = Environment {current = LoxEnv.create None; enclosing = None}; *)
 
 let is_truthy = function
   | No_primitive -> false
@@ -21,7 +25,7 @@ let check_number_operand = function
 let rec evaluate_statement statement =
   match statement with
   | Expression_stmt e -> evaluate_expr e
-  | Var_stmt { name; init } -> (
+  (* | Var_stmt { name; init } -> (
       match (name, init) with
       | { kind = Identifier n; line = _ }, Some e ->
           print_endline ("Define var named: " ^ n);
@@ -30,7 +34,7 @@ let rec evaluate_statement statement =
            | Some _ -> print_endline "YUP exists"
            | None -> raise (RuntimeException "HUH nothing?"));
           No_primitive
-      | _ -> raise (RuntimeException "Failed"))
+      | _ -> raise (RuntimeException "Failed")) *)
   | Print_stmt e ->
       print_endline (primitive_as_string (evaluate_expr e));
       No_primitive
@@ -45,14 +49,8 @@ and evaluate_expr statement =
       eval_binary_expr left kind right
   | Logical_expr { left; op = { kind; _ }; right } ->
       eval_logical_expr left kind right
+  (* | Call_expr e ->  eval_call_expr e *)
   | _ -> No_primitive
-
-(* let add_or_concat (type a) (literal : a literal) (x : a) (y : a) : lox_primitive
-     =
-   match literal with
-   | Number_literal _ -> Lox_literal (Number_literal (x +. y))
-   | String_literal _ -> Lox_literal (String_literal (x ^ y))
-   | _ -> raise (RuntimeException "Operands must be two numbers or two strings.") *)
 
 and add_or_concat x y =
   match (x, y) with
@@ -119,15 +117,11 @@ and eval_unary_expr (tk : token_kind) (right : expr) =
   | Minus -> Lox_literal (Number_literal (-.check_number_operand res))
   | _ -> No_primitive
 
-(* | Variable_expr (_, _) -> No_primitive *)
-(* | Binary_expr _ -> No_primitive *)
-(* | Logical_expr _ -> print_endline "sss"
-   | Group_expr _ -> print_endline "dsfsdf"
-   | Literal_expr x -> Literal x
-   | Call_expr _ -> print_endline "sdfsdfs"
-   | Assign_expr _ -> print_endline "sfsadfas" *)
-(* | _ -> No_primitive *)
-(* print_endline "Not implemented"; *)
+(* and eval_call_expr  { callee : expr; paren : token; args : expr list } =
+   let eval_res : lox_primitive = evaluate_expr callee in
+   match eval_res with
+   | Lox_function f ->
+   | _ -> raise "Can only call functions and classes." *)
 
 let interpret stmts =
   let rec interpret_aux = function

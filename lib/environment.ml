@@ -1,52 +1,27 @@
 open Lox_values
 
-module CommonEnv = struct
-  type base_t = (string, lox_primitive) Hashtbl.t
+type environment = {
+  current : (string, lox_primitive) Hashtbl.t;
+  enclosing : environment option;
+}
 
-  let create_base () : base_t = Hashtbl.create 16
+let rec define_primitive ({ current; enclosing } : environment) key value =
+  enclosing |> function
+  | Some p -> define_primitive p key value
+  | None -> Hashtbl.replace current key value
 
-  let define_base (env : base_t) (key : string) (value : lox_primitive) : unit =
-    Hashtbl.replace env key value
+let rec get_primitive ({ current; enclosing } : environment) key =
+  enclosing |> function
+  | Some p -> get_primitive p key
+  | None -> Hashtbl.find_opt current key
 
-  let get_base (env : base_t) (key : string) : lox_primitive option =
-    Hashtbl.find_opt env key
-end
+(* let create_base () : base_t = Hashtbl.create 16 *)
+let make_env = { current = Hashtbl.create 16; enclosing = None }
 
-module BaseEnv : sig
-  type t
+let make_env_with_enclosing enclosing =
+  { current = Hashtbl.create 16; enclosing = Some enclosing }
 
-  val create : unit -> t
-  val define : t -> string -> lox_primitive -> unit
-  val get : t -> string -> lox_primitive option
-end = struct
-  type t = CommonEnv.base_t
-
-  let create () = CommonEnv.create_base ()
-  let define = CommonEnv.define_base
-  let get = CommonEnv.get_base
-end
-
-module MakeEnv (Enclosing : sig
-  type t
-
-  val get : t -> string -> lox_primitive option
-end) : sig
-  type t
-
-  val create : Enclosing.t option -> t
-  val define : t -> string -> lox_primitive -> unit
-  val get : t -> string -> lox_primitive option
-end = struct
-  type t = { base : CommonEnv.base_t; enclosing : Enclosing.t option }
-
-  let create enclosing = { base = CommonEnv.create_base (); enclosing }
-  let define env key value = CommonEnv.define_base env.base key value
-
-  let get env key =
-    match CommonEnv.get_base env.base key with
-    | Some value -> Some value
-    | None -> (
-        match env.enclosing with
-        | Some parent_env -> Enclosing.get parent_env key
-        | None -> None)
-end
+let%test _ =
+  let env = make_env_with_enclosing make_env in
+  define_primitive env "Test" (Lox_literal (String_literal "Test"));
+  get_primitive env "Test" |> function Some _ -> true | None -> false
